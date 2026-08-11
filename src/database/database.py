@@ -43,31 +43,34 @@ class Database:
 
         with self.lock:
 
-            for memory in memories:
+            try:
+                with self.connection:
+                    for memory in memories:
 
-                self.cursor.execute("""
-                INSERT INTO memories
-                (
-                    category,
-                    title,
-                    content,
-                    date,
-                    time,
-                    notification
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, (
+                        self.cursor.execute("""
+                        INSERT INTO memories
+                        (
+                            category,
+                            title,
+                            content,
+                            date,
+                            time,
+                            notification
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """, (
 
-                    memory["category"],
-                    memory["title"],
-                    memory["content"],
-                    memory["date"],
-                    memory["time"],
-                    int(memory["notification"])
+                            memory["category"],
+                            memory["title"],
+                            memory["content"],
+                            memory["date"],
+                            memory["time"],
+                            int(memory["notification"])
 
-                ))
-
-            self.connection.commit()
+                        ))
+            except Exception:
+                self.connection.rollback()
+                raise
 
     def get_all_memories(self):
 

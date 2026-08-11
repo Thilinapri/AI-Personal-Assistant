@@ -86,7 +86,4 @@ class SpeechListener:
                             return sentence
 
         except KeyboardInterrupt:
-
-            print("\n👋 Listener stopped.")
-
-            return None
+            raise

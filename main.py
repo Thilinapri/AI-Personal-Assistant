@@ -68,9 +68,12 @@ def main():
 
     calibrator = NoiseCalibrator(microphone)
 
-    threshold = calibrator.calibrate()
+    noise_profile = calibrator.calibrate()
 
-    print(f"Noise Threshold : {threshold:.5f}")
+    print(
+        "Speech Start Threshold : "
+        f"{noise_profile['start_threshold']:.5f}"
+    )
 
     # ---------------------------------
     # Listener
@@ -78,7 +81,7 @@ def main():
 
     listener = SpeechListener(
         microphone=microphone,
-        threshold=threshold
+        noise_profile=noise_profile
     )
 
     # ---------------------------------

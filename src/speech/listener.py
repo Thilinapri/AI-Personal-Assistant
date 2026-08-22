@@ -1,5 +1,7 @@
-import numpy as np
+import math
 from collections import deque
+
+import numpy as np
 
 from src.config import (
     SAMPLE_RATE,
@@ -12,78 +14,60 @@ from src.config import (
 
 class SpeechListener:
 
-    def __init__(self, microphone, threshold):
+    def __init__(self, microphone, noise_profile):
         self.microphone = microphone
-        self.threshold = threshold
+        self.start_threshold = noise_profile["start_threshold"]
+        self.continue_threshold = noise_profile["continue_threshold"]
 
     def listen(self):
 
         print("\n🎧 Listening...")
 
         recording = False
-
         speech_counter = 0
         silence_counter = 0
 
-        required_silence_blocks = int(
+        required_silence_blocks = math.ceil(
             (SILENCE_DURATION * SAMPLE_RATE) / BLOCK_SIZE
         )
 
-        # Stores the last 0.5 seconds of audio
+        # Stores the last 0.5 seconds of audio.
         prebuffer = deque(maxlen=PREBUFFER_BLOCKS)
-
         audio_buffer = []
 
-        try:
+        while True:
 
-            while True:
+            audio = self.microphone.read()
+            prebuffer.append(audio)
 
-                audio = self.microphone.read()
+            volume = np.sqrt(np.mean(audio ** 2))
 
-                prebuffer.append(audio)
-
-                volume = np.sqrt(np.mean(audio ** 2))
-
-                # --------------------
-                # Speech Detected
-                # --------------------
-                if volume > self.threshold:
-
+            if not recording:
+                if volume >= self.start_threshold:
                     speech_counter += 1
-
-                    if not recording and speech_counter >= SPEECH_START_BLOCKS:
-
-                        recording = True
-                        silence_counter = 0
-
-                        print("🟢 Speech Started")
-
-                        # Include previous audio
-                        audio_buffer.extend(prebuffer)
-
-                    if recording:
-                        audio_buffer.append(audio)
-
-                # --------------------
-                # Silence
-                # --------------------
                 else:
-
                     speech_counter = 0
 
-                    if recording:
+                if speech_counter >= SPEECH_START_BLOCKS:
+                    recording = True
+                    silence_counter = 0
 
-                        audio_buffer.append(audio)
+                    print("🟢 Speech Started")
 
-                        silence_counter += 1
+                    # The current block is already in the prebuffer.
+                    audio_buffer.extend(prebuffer)
 
-                        if silence_counter >= required_silence_blocks:
+                continue
 
-                            print("🔴 Speech Ended")
+            # Every block belongs to an active recording.
+            audio_buffer.append(audio)
 
-                            sentence = np.concatenate(audio_buffer, axis=0)
+            if volume >= self.continue_threshold:
+                silence_counter = 0
+                continue
 
-                            return sentence
+            silence_counter += 1
 
-        except KeyboardInterrupt:
-            raise
+            if silence_counter >= required_silence_blocks:
+                print("🔴 Speech Ended")
+                return np.concatenate(audio_buffer, axis=0)

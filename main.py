@@ -1,17 +1,15 @@
 import queue
 import sys
 import threading
-from datetime import datetime
 
 from src.audio.microphone import Microphone
-from src.audio.calibrator import NoiseCalibrator
-from src.speech.listener import SpeechListener
 from src.speech.whisper_model import WhisperService
 from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
 from src.worker.audio_worker import AudioWorker
+from src.worker.continuous_transcriber import ContinuousTranscriber
 from src.worker.session_processor import SessionProcessor
 
 
@@ -25,22 +23,35 @@ def configure_console_output():
 
 def shutdown_components(
     microphone,
+    continuous_transcriber,
     session_processor,
     audio_queue,
     worker_thread,
     database,
 ):
-    """Stop workers before closing shared database and microphone resources."""
+    """Stop all workers before closing shared resources."""
 
-    # The listener loop has exited, so no additional microphone audio is queued.
+    print("\nStopping Assistant...")
+
+    # Stop microphone capture thread first.
+    continuous_transcriber.stop()
+    continuous_transcriber.join()
+
+    # Stop periodic session processing.
     session_processor.stop()
+
+    # Tell AudioWorker that no more audio will arrive.
     audio_queue.put(None)
 
+    # Wait for both workers to finish.
     session_processor.join()
     worker_thread.join()
 
+    # Only close shared resources after workers have stopped.
     database.close()
     microphone.stop()
+
+    print("Assistant stopped.")
 
 
 def main():
@@ -48,41 +59,21 @@ def main():
     configure_console_output()
 
     print("=" * 50)
-    print("AI Personal Memory Assistant")
+    print("AI Personal Assistant")
     print("=" * 50)
 
     # ---------------------------------
-    # Initialize microphone
+    # Database
+    # ---------------------------------
+
+    database = Database()
+
+    # ---------------------------------
+    # Microphone
     # ---------------------------------
 
     microphone = Microphone()
-
-    print("Starting microphone...")
     microphone.start()
-
-    # ---------------------------------
-    # Noise Calibration
-    # ---------------------------------
-
-    print("Calibrating background noise...")
-
-    calibrator = NoiseCalibrator(microphone)
-
-    noise_profile = calibrator.calibrate()
-
-    print(
-        "Speech Start Threshold : "
-        f"{noise_profile['start_threshold']:.5f}"
-    )
-
-    # ---------------------------------
-    # Listener
-    # ---------------------------------
-
-    listener = SpeechListener(
-        microphone=microphone,
-        noise_profile=noise_profile
-    )
 
     # ---------------------------------
     # AI Components
@@ -92,11 +83,9 @@ def main():
 
     keyword_filter = KeywordFilter()
 
-    memory_engine = MemoryEngine()
-
     transcript_buffer = TranscriptBuffer()
 
-    database = Database()
+    memory_engine = MemoryEngine()
 
     # ---------------------------------
     # Audio Queue
@@ -105,7 +94,7 @@ def main():
     audio_queue = queue.Queue()
 
     # ---------------------------------
-    # Worker
+    # Audio Worker
     # ---------------------------------
 
     worker = AudioWorker(
@@ -114,42 +103,63 @@ def main():
         transcript_buffer=transcript_buffer,
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
-        database=database
+        database=database,
     )
 
     worker_thread = threading.Thread(
         target=worker.run,
-        daemon=True
+        daemon=True,
+        name="AudioWorker",
     )
 
     worker_thread.start()
+
+    # ---------------------------------
+    # Continuous Transcriber
+    # ---------------------------------
+
+    continuous_transcriber = ContinuousTranscriber(
+        microphone=microphone,
+        audio_queue=audio_queue,
+    )
+
+    continuous_transcriber.start()
+
+    # ---------------------------------
+    # Session Processor
+    # ---------------------------------
 
     session_processor = SessionProcessor(
         transcript_buffer=transcript_buffer,
         memory_engine=memory_engine,
         database=database,
     )
+
     session_processor.start()
 
-    print("\n✅ Assistant Ready...\n")
+    print()
+    print("✅ Assistant Ready")
+    print("🎧 Continuously listening...")
+    print()
+
+    # ---------------------------------
+    # Main Loop
+    # ---------------------------------
 
     try:
 
         while True:
-
-            audio = listener.listen()
-
-            if audio is not None:
-
-                audio_queue.put(audio)
+            threading.Event().wait(1)
 
     except KeyboardInterrupt:
 
         print("\nStopping Assistant...")
 
     finally:
+
         shutdown_components(
             microphone=microphone,
+            continuous_transcriber=continuous_transcriber,
             session_processor=session_processor,
             audio_queue=audio_queue,
             worker_thread=worker_thread,

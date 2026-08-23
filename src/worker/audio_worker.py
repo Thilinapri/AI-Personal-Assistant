@@ -45,6 +45,8 @@ class AudioWorker:
 
         try:
             transcription = self.whisper.transcribe(audio)
+            print(f"\n📝 Whisper transcription: {transcription!r}")
+
         except Exception as error:
             print(f"Whisper transcription failed: {error}")
             return
@@ -61,6 +63,8 @@ class AudioWorker:
                 before=2,
                 after=0,
             )
+
+            print(f"📥 Transcript buffered: {transcription}")
         except Exception as error:
             print(f"Transcript buffering failed: {error}")
             return

@@ -65,12 +65,16 @@ class AudioWorker:
             )
 
             print(f"📥 Transcript buffered: {transcription}")
+
         except Exception as error:
             print(f"Transcript buffering failed: {error}")
             return
 
         try:
             should_process = self.keyword_filter.should_process(transcription)
+
+            print(f"🔎 Keyword detected: {should_process}")
+
         except Exception as error:
             print(f"Keyword detection failed: {error}")
             return
@@ -79,12 +83,23 @@ class AudioWorker:
             return
 
         try:
+            print("📋 Immediate context:")
+            print(context)
+
+            print("🤖 Sending immediate context to Gemini...")
+
             result = self.memory_engine.process(
                 mode="immediate",
                 text=context,
                 current_time=datetime.now(),
             )
+
+            print(f"🤖 Gemini result: {result!r}")
+
             memories = result["memories"]
+
+            print(f"🧠 Memories extracted: {memories!r}")
+
         except Exception as error:
             # The transcription remains buffered for later processing.
             print(f"Immediate memory processing failed: {error}")
@@ -95,6 +110,8 @@ class AudioWorker:
 
         try:
             self.database.save_memories(memories)
+            print("💾 Memories saved to database.")
+
         except Exception as error:
             # The transcription remains buffered even if persistence fails.
             print(f"Saving memories failed: {error}")

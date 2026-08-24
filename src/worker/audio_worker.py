@@ -11,14 +11,14 @@ class AudioWorker:
         transcript_buffer,
         keyword_filter,
         memory_engine,
-        database,
+        memory_manager,
     ):
         self.audio_queue = audio_queue
         self.whisper = whisper
         self.transcript_buffer = transcript_buffer
         self.keyword_filter = keyword_filter
         self.memory_engine = memory_engine
-        self.database = database
+        self.memory_manager = memory_manager
 
     def run(self):
         """Consume audio until the queue sentinel is received."""
@@ -109,7 +109,7 @@ class AudioWorker:
             return
 
         try:
-            self.database.save_memories(memories)
+            self.memory_manager.store_memories(memories)
             print("💾 Memories saved to database.")
 
         except Exception as error:

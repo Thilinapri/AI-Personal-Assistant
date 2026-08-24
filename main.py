@@ -8,6 +8,7 @@ from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
+from src.memory.memory_manager import MemoryManager
 from src.worker.audio_worker import AudioWorker
 from src.worker.continuous_transcriber import ContinuousTranscriber
 from src.worker.session_processor import SessionProcessor
@@ -69,6 +70,12 @@ def main():
     database = Database()
 
     # ---------------------------------
+    # Memory Manager
+    # ---------------------------------
+
+    memory_manager = MemoryManager(database)
+
+    # ---------------------------------
     # Microphone
     # ---------------------------------
 
@@ -103,7 +110,7 @@ def main():
         transcript_buffer=transcript_buffer,
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
-        database=database,
+        memory_manager=memory_manager,
     )
 
     worker_thread = threading.Thread(
@@ -132,7 +139,7 @@ def main():
     session_processor = SessionProcessor(
         transcript_buffer=transcript_buffer,
         memory_engine=memory_engine,
-        database=database,
+        memory_manager=memory_manager,
     )
 
     session_processor.start()

@@ -29,12 +29,12 @@ class SessionProcessor:
         self,
         transcript_buffer,
         memory_engine,
-        database,
+        memory_manager,
         interval_seconds=20 * 60,
     ):
         self.transcript_buffer = transcript_buffer
         self.memory_engine = memory_engine
-        self.database = database
+        self.memory_manager = memory_manager
         self.interval_seconds = interval_seconds
         self._stop_event = threading.Event()
         self._thread = None
@@ -101,7 +101,7 @@ class SessionProcessor:
 
         try:
             if memories:
-                self.database.save_memories(memories)
+                self.memory_manager.store_memories(memories)
         except Exception as error:
             print(f"Session memory saving failed: {error}")
             return False

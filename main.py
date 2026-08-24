@@ -8,7 +8,11 @@ from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
+
 from src.memory.memory_manager import MemoryManager
+from src.memory.embedding_service import EmbeddingService
+from src.memory.retrieval_service import RetrievalService
+
 from src.worker.audio_worker import AudioWorker
 from src.worker.continuous_transcriber import ContinuousTranscriber
 from src.worker.session_processor import SessionProcessor
@@ -70,10 +74,25 @@ def main():
     database = Database()
 
     # ---------------------------------
+    # Local Memory AI Components
+    # ---------------------------------
+
+    embedding_service = EmbeddingService()
+
+    retrieval_service = RetrievalService(
+        database=database,
+        embedding_service=embedding_service,
+    )
+
+    # ---------------------------------
     # Memory Manager
     # ---------------------------------
 
-    memory_manager = MemoryManager(database)
+    memory_manager = MemoryManager(
+        database=database,
+        embedding_service=embedding_service,
+        retrieval_service=retrieval_service,
+    )
 
     # ---------------------------------
     # Microphone

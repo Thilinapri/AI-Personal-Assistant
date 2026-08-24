@@ -43,14 +43,17 @@ class Database:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             seen_count INTEGER NOT NULL DEFAULT 1,
-            supersedes_id INTEGER
+            supersedes_id INTEGER,
+
+            embedding TEXT,
+            embedding_model TEXT
         )
         """)
 
         self.connection.commit()
 
     def migrate_memories_table(self):
-        """Add lifecycle columns to older databases without deleting data."""
+        """Add new columns to older databases without deleting data."""
 
         self.cursor.execute("PRAGMA table_info(memories)")
 
@@ -78,7 +81,15 @@ class Database:
 
             "supersedes_id":
                 "ALTER TABLE memories "
-                "ADD COLUMN supersedes_id INTEGER"
+                "ADD COLUMN supersedes_id INTEGER",
+
+            "embedding":
+                "ALTER TABLE memories "
+                "ADD COLUMN embedding TEXT",
+
+            "embedding_model":
+                "ALTER TABLE memories "
+                "ADD COLUMN embedding_model TEXT"
         }
 
         for column_name, sql in migrations.items():
@@ -205,7 +216,9 @@ class Database:
                     updated_at,
                     last_seen_at,
                     seen_count,
-                    supersedes_id
+                    supersedes_id,
+                    embedding,
+                    embedding_model
                 FROM memories
                 WHERE id = ?
             """, (memory_id,))
@@ -232,7 +245,9 @@ class Database:
                     updated_at,
                     last_seen_at,
                     seen_count,
-                    supersedes_id
+                    supersedes_id,
+                    embedding,
+                    embedding_model
                 FROM memories
                 WHERE status = 'active'
                 ORDER BY id DESC
@@ -269,6 +284,30 @@ class Database:
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (memory_id,))
+
+    def update_embedding(
+        self,
+        memory_id,
+        embedding,
+        embedding_model,
+    ):
+        """Store a serialized embedding for a memory."""
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        embedding = ?,
+                        embedding_model = ?
+                    WHERE id = ?
+                """, (
+                    embedding,
+                    embedding_model,
+                    memory_id,
+                ))
 
     def get_all_memories(self):
         """Return all memories for compatibility with existing code."""

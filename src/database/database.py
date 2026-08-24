@@ -5,13 +5,16 @@ from pathlib import Path
 
 class Database:
 
-    def __init__(self):
+    def __init__(self, database_path=None):
 
-        db_path = Path("data")
-        db_path.mkdir(exist_ok=True)
+        if database_path is None:
+            db_directory = Path("data")
+            db_directory.mkdir(exist_ok=True)
+
+            database_path = db_directory / "memory.db"
 
         self.connection = sqlite3.connect(
-            db_path / "memory.db",
+            database_path,
             check_same_thread=False
         )
 
@@ -20,6 +23,7 @@ class Database:
         self.lock = threading.Lock()
 
         self.create_tables()
+        self.migrate_memories_table()
 
     def create_tables(self):
 
@@ -33,8 +37,66 @@ class Database:
             time TEXT,
             notification INTEGER DEFAULT 0,
             processed INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            status TEXT NOT NULL DEFAULT 'active',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            seen_count INTEGER NOT NULL DEFAULT 1,
+            supersedes_id INTEGER
         )
+        """)
+
+        self.connection.commit()
+
+    def migrate_memories_table(self):
+        """Add lifecycle columns to older databases without deleting data."""
+
+        self.cursor.execute("PRAGMA table_info(memories)")
+
+        existing_columns = {
+            row[1]
+            for row in self.cursor.fetchall()
+        }
+
+        migrations = {
+            "status":
+                "ALTER TABLE memories "
+                "ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+
+            "updated_at":
+                "ALTER TABLE memories "
+                "ADD COLUMN updated_at TIMESTAMP",
+
+            "last_seen_at":
+                "ALTER TABLE memories "
+                "ADD COLUMN last_seen_at TIMESTAMP",
+
+            "seen_count":
+                "ALTER TABLE memories "
+                "ADD COLUMN seen_count INTEGER NOT NULL DEFAULT 1",
+
+            "supersedes_id":
+                "ALTER TABLE memories "
+                "ADD COLUMN supersedes_id INTEGER"
+        }
+
+        for column_name, sql in migrations.items():
+
+            if column_name not in existing_columns:
+                self.cursor.execute(sql)
+
+        # Give old memories sensible lifecycle timestamps.
+        self.cursor.execute("""
+        UPDATE memories
+        SET updated_at = created_at
+        WHERE updated_at IS NULL
+        """)
+
+        self.cursor.execute("""
+        UPDATE memories
+        SET last_seen_at = created_at
+        WHERE last_seen_at IS NULL
         """)
 
         self.connection.commit()
@@ -45,6 +107,7 @@ class Database:
 
             try:
                 with self.connection:
+
                     for memory in memories:
 
                         self.cursor.execute("""
@@ -55,9 +118,15 @@ class Database:
                             content,
                             date,
                             time,
-                            notification
+                            notification,
+                            updated_at,
+                            last_seen_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        VALUES (
+                            ?, ?, ?, ?, ?, ?,
+                            CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP
+                        )
                         """, (
 
                             memory["category"],
@@ -68,6 +137,7 @@ class Database:
                             int(memory["notification"])
 
                         ))
+
             except Exception:
                 self.connection.rollback()
                 raise

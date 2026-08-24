@@ -102,6 +102,7 @@ class Database:
         self.connection.commit()
 
     def save_memories(self, memories):
+        """Legacy method for saving multiple memories."""
 
         with self.lock:
 
@@ -142,7 +143,135 @@ class Database:
                 self.connection.rollback()
                 raise
 
+    def insert_memory(self, memory, supersedes_id=None):
+        """Insert one active memory and return its database ID."""
+
+        with self.lock:
+
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    INSERT INTO memories
+                    (
+                        category,
+                        title,
+                        content,
+                        date,
+                        time,
+                        notification,
+                        status,
+                        updated_at,
+                        last_seen_at,
+                        seen_count,
+                        supersedes_id
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?,
+                        'active',
+                        CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP,
+                        1,
+                        ?
+                    )
+                """, (
+                    memory["category"],
+                    memory["title"],
+                    memory["content"],
+                    memory["date"],
+                    memory["time"],
+                    int(memory["notification"]),
+                    supersedes_id,
+                ))
+
+                return cursor.lastrowid
+
+    def get_memory(self, memory_id):
+        """Return one memory by ID."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    id,
+                    category,
+                    title,
+                    content,
+                    date,
+                    time,
+                    notification,
+                    processed,
+                    created_at,
+                    status,
+                    updated_at,
+                    last_seen_at,
+                    seen_count,
+                    supersedes_id
+                FROM memories
+                WHERE id = ?
+            """, (memory_id,))
+
+            return cursor.fetchone()
+
+    def get_active_memories(self):
+        """Return all memories that are currently active."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    id,
+                    category,
+                    title,
+                    content,
+                    date,
+                    time,
+                    notification,
+                    processed,
+                    created_at,
+                    status,
+                    updated_at,
+                    last_seen_at,
+                    seen_count,
+                    supersedes_id
+                FROM memories
+                WHERE status = 'active'
+                ORDER BY id DESC
+            """)
+
+            return cursor.fetchall()
+
+    def increment_seen(self, memory_id):
+        """Record that an existing memory was observed again."""
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        seen_count = seen_count + 1,
+                        last_seen_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (memory_id,))
+
+    def mark_superseded(self, memory_id):
+        """Mark an older memory as replaced by newer information."""
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        status = 'superseded',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (memory_id,))
+
     def get_all_memories(self):
+        """Return all memories for compatibility with existing code."""
 
         with self.lock:
 

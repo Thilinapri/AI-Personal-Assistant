@@ -196,6 +196,60 @@ class Database:
 
                 return cursor.lastrowid
 
+    def replace_memory(self, old_memory_id, new_memory):
+        """Replace an older memory with a new active version."""
+
+        with self.lock:
+
+            with self.connection:
+
+                # Insert the new version.
+                cursor = self.connection.execute("""
+                    INSERT INTO memories
+                    (
+                        category,
+                        title,
+                        content,
+                        date,
+                        time,
+                        notification,
+                        status,
+                        updated_at,
+                        last_seen_at,
+                        seen_count,
+                        supersedes_id
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?,
+                        'active',
+                        CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP,
+                        1,
+                        ?
+                    )
+                """, (
+                    new_memory["category"],
+                    new_memory["title"],
+                    new_memory["content"],
+                    new_memory["date"],
+                    new_memory["time"],
+                    int(new_memory["notification"]),
+                    old_memory_id,
+                ))
+
+                new_memory_id = cursor.lastrowid
+
+                # Mark the old version as superseded.
+                self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        status = 'superseded',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (old_memory_id,))
+
+                return new_memory_id
+
     def get_memory(self, memory_id):
         """Return one memory by ID."""
 

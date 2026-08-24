@@ -4,35 +4,118 @@ import json
 class MemoryManager:
     """Coordinates long-term memory storage and management."""
 
-    def __init__(self, database, embedding_service=None):
-
+    def __init__(
+        self,
+        database,
+        embedding_service=None,
+        retrieval_service=None,
+        relationship_classifier=None,
+        candidate_threshold=0.72,
+    ):
         self.database = database
         self.embedding_service = embedding_service
+        self.retrieval_service = retrieval_service
+        self.relationship_classifier = relationship_classifier
+        self.candidate_threshold = candidate_threshold
 
     def store_memories(self, memories):
-        """Store memories and generate embeddings when available."""
+        """Store and manage multiple extracted memories."""
 
         if not memories:
             return
 
         for memory in memories:
+            self.store_memory(memory)
 
-            memory_id = self.database.insert_memory(memory)
+    def store_memory(self, memory):
+        """Store one memory after checking for duplicates or updates."""
 
-            if self.embedding_service is not None:
+        candidates = self._find_candidates(memory)
 
-                memory_text = self._build_memory_text(memory)
+        for candidate in candidates:
 
-                embedding = self.embedding_service.encode(memory_text)
+            relationship = self.relationship_classifier.classify(
+                memory,
+                candidate,
+            )
 
-                self.database.update_embedding(
-                    memory_id,
-                    json.dumps(embedding),
-                    self.embedding_service.model_name,
+            if relationship == "duplicate":
+
+                self.database.increment_seen(
+                    candidate["id"]
                 )
 
+                return candidate["id"]
+
+            if relationship == "update":
+
+                memory_id = self.database.replace_memory(
+                    candidate["id"],
+                    memory,
+                )
+
+                self._store_embedding(
+                    memory_id,
+                    memory,
+                )
+
+                return memory_id
+
+            if relationship == "related":
+                break
+
+        # No duplicate/update found.
+        memory_id = self.database.insert_memory(memory)
+
+        self._store_embedding(
+            memory_id,
+            memory,
+        )
+
+        return memory_id
+
+    def _find_candidates(self, memory):
+        """Find similar active memories stored locally."""
+
+        if (
+            self.retrieval_service is None
+            or self.relationship_classifier is None
+        ):
+            return []
+
+        memory_text = self._build_memory_text(memory)
+
+        results = self.retrieval_service.search(
+            memory_text,
+            limit=3,
+        )
+
+        return [
+            result
+            for result in results
+            if result["score"] >= self.candidate_threshold
+        ]
+
+    def _store_embedding(self, memory_id, memory):
+        """Generate and store an embedding for a memory."""
+
+        if self.embedding_service is None:
+            return
+
+        memory_text = self._build_memory_text(memory)
+
+        embedding = self.embedding_service.encode(
+            memory_text
+        )
+
+        self.database.update_embedding(
+            memory_id,
+            json.dumps(embedding),
+            self.embedding_service.model_name,
+        )
+
     def _build_memory_text(self, memory):
-        """Create one text representation of a memory for embedding."""
+        """Build one searchable text representation of a memory."""
 
         parts = [
             memory.get("category", ""),

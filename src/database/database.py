@@ -18,6 +18,8 @@ class Database:
             check_same_thread=False
         )
 
+        self.connection.execute("PRAGMA foreign_keys = ON")
+
         self.cursor = self.connection.cursor()
 
         self.lock = threading.Lock()
@@ -26,6 +28,10 @@ class Database:
         self.migrate_memories_table()
 
     def create_tables(self):
+
+        # ---------------------------------
+        # Memories Table
+        # ---------------------------------
 
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS memories (
@@ -47,6 +53,25 @@ class Database:
 
             embedding TEXT,
             embedding_model TEXT
+        )
+        """)
+
+        # ---------------------------------
+        # Reminders Table
+        # ---------------------------------
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            memory_id INTEGER NOT NULL,
+            reminder_time TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            triggered_at TIMESTAMP,
+
+            FOREIGN KEY (memory_id)
+                REFERENCES memories(id)
+                ON DELETE CASCADE
         )
         """)
 
@@ -97,7 +122,6 @@ class Database:
             if column_name not in existing_columns:
                 self.cursor.execute(sql)
 
-        # Give old memories sensible lifecycle timestamps.
         self.cursor.execute("""
         UPDATE memories
         SET updated_at = created_at
@@ -140,14 +164,12 @@ class Database:
                             CURRENT_TIMESTAMP
                         )
                         """, (
-
                             memory["category"],
                             memory["title"],
                             memory["content"],
                             memory["date"],
                             memory["time"],
                             int(memory["notification"])
-
                         ))
 
             except Exception:
@@ -203,7 +225,6 @@ class Database:
 
             with self.connection:
 
-                # Insert the new version.
                 cursor = self.connection.execute("""
                     INSERT INTO memories
                     (
@@ -239,7 +260,6 @@ class Database:
 
                 new_memory_id = cursor.lastrowid
 
-                # Mark the old version as superseded.
                 self.connection.execute("""
                     UPDATE memories
                     SET
@@ -361,6 +381,78 @@ class Database:
                     embedding,
                     embedding_model,
                     memory_id,
+                ))
+
+    # ---------------------------------
+    # Reminder Operations
+    # ---------------------------------
+
+    def create_reminder(self, memory_id, reminder_time):
+        """Create a pending reminder and return its ID."""
+
+        with self.lock:
+
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    INSERT INTO reminders
+                    (
+                        memory_id,
+                        reminder_time,
+                        status
+                    )
+                    VALUES (?, ?, 'pending')
+                """, (
+                    memory_id,
+                    reminder_time,
+                ))
+
+                return cursor.lastrowid
+
+    def get_due_reminders(self, current_time):
+        """Return pending reminders whose scheduled time has arrived."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    reminders.id,
+                    reminders.memory_id,
+                    reminders.reminder_time,
+                    reminders.status,
+                    memories.title,
+                    memories.content
+                FROM reminders
+                JOIN memories
+                    ON reminders.memory_id = memories.id
+                WHERE reminders.status = 'pending'
+                  AND reminders.reminder_time <= ?
+                  AND memories.status = 'active'
+                ORDER BY reminders.reminder_time ASC
+            """, (current_time,))
+
+            return cursor.fetchall()
+
+    def mark_reminder_triggered(
+        self,
+        reminder_id,
+        triggered_at,
+    ):
+        """Mark a reminder as triggered so it fires only once."""
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    UPDATE reminders
+                    SET
+                        status = 'triggered',
+                        triggered_at = ?
+                    WHERE id = ?
+                """, (
+                    triggered_at,
+                    reminder_id,
                 ))
 
     def get_all_memories(self):

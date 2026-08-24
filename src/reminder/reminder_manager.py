@@ -1,13 +1,61 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class ReminderManager:
-    """Checks and triggers reminders for stored memories."""
+    """Creates, checks, and triggers reminders for stored memories."""
 
-    def __init__(self, database, notifier=None):
-
+    def __init__(
+        self,
+        database,
+        notifier=None,
+        default_lead_minutes=30,
+    ):
         self.database = database
         self.notifier = notifier or self._default_notifier
+        self.default_lead_minutes = default_lead_minutes
+
+    def create_for_memory(self, memory_id, memory):
+        """Create a reminder automatically when a memory requires one."""
+
+        # No reminder requested.
+        if not memory.get("notification"):
+            return None
+
+        date_value = memory.get("date")
+        time_value = memory.get("time")
+
+        # We need both date and time to schedule a reminder.
+        if not date_value or not time_value:
+            return None
+
+        try:
+            event_time = datetime.strptime(
+                f"{date_value} {time_value}",
+                "%Y-%m-%d %H:%M",
+            )
+
+        except ValueError:
+            return None
+
+        reminder_time = event_time - timedelta(
+            minutes=self.default_lead_minutes
+        )
+
+        reminder_time_text = reminder_time.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        return self.database.create_reminder(
+            memory_id,
+            reminder_time_text,
+        )
+
+    def cancel_for_memory(self, memory_id):
+        """Cancel pending reminders for an outdated memory."""
+
+        self.database.cancel_pending_reminders_for_memory(
+            memory_id
+        )
 
     def check_due_reminders(self, current_time=None):
         """Trigger all pending reminders that are now due."""
@@ -31,14 +79,14 @@ class ReminderManager:
             title = reminder[4]
             content = reminder[5]
 
-            # Notify first.
+            # Send the notification first.
             self.notifier(
                 title,
                 content,
                 reminder_time,
             )
 
-            # Only mark it triggered after notification succeeds.
+            # Only mark it triggered if notification succeeded.
             self.database.mark_reminder_triggered(
                 reminder_id,
                 current_time,

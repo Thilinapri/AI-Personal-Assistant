@@ -10,12 +10,14 @@ class MemoryManager:
         embedding_service=None,
         retrieval_service=None,
         relationship_classifier=None,
+        reminder_manager=None,
         candidate_threshold=0.72,
     ):
         self.database = database
         self.embedding_service = embedding_service
         self.retrieval_service = retrieval_service
         self.relationship_classifier = relationship_classifier
+        self.reminder_manager = reminder_manager
         self.candidate_threshold = candidate_threshold
 
     def store_memories(self, memories):
@@ -39,18 +41,29 @@ class MemoryManager:
                 candidate,
             )
 
+            # ---------------------------------
+            # Duplicate
+            # ---------------------------------
+
             if relationship == "duplicate":
 
                 self.database.increment_seen(
                     candidate["id"]
                 )
 
+                # Do not create another reminder.
                 return candidate["id"]
+
+            # ---------------------------------
+            # Update
+            # ---------------------------------
 
             if relationship == "update":
 
+                old_memory_id = candidate["id"]
+
                 memory_id = self.database.replace_memory(
-                    candidate["id"],
+                    old_memory_id,
                     memory,
                 )
 
@@ -59,18 +72,45 @@ class MemoryManager:
                     memory,
                 )
 
+                if self.reminder_manager is not None:
+
+                    # Cancel reminder belonging to old information.
+                    self.reminder_manager.cancel_for_memory(
+                        old_memory_id
+                    )
+
+                    # Create reminder for the updated memory.
+                    self.reminder_manager.create_for_memory(
+                        memory_id,
+                        memory,
+                    )
+
                 return memory_id
+
+            # ---------------------------------
+            # Related
+            # ---------------------------------
 
             if relationship == "related":
                 break
 
-        # No duplicate/update found.
+        # ---------------------------------
+        # New or Related Memory
+        # ---------------------------------
+
         memory_id = self.database.insert_memory(memory)
 
         self._store_embedding(
             memory_id,
             memory,
         )
+
+        if self.reminder_manager is not None:
+
+            self.reminder_manager.create_for_memory(
+                memory_id,
+                memory,
+            )
 
         return memory_id
 

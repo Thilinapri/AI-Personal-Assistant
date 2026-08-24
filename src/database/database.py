@@ -433,6 +433,20 @@ class Database:
 
             return cursor.fetchall()
 
+    def cancel_pending_reminders_for_memory(self, memory_id):
+        """Cancel pending reminders linked to an outdated memory."""
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    UPDATE reminders
+                    SET status = 'cancelled'
+                    WHERE memory_id = ?
+                      AND status = 'pending'
+                """, (memory_id,))
+
     def mark_reminder_triggered(
         self,
         reminder_id,

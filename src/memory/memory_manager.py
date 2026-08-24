@@ -74,6 +74,40 @@ class MemoryManager:
 
         return memory_id
 
+    def backfill_missing_embeddings(self):
+        """Generate embeddings for active memories that do not have one yet."""
+
+        if self.embedding_service is None:
+            return 0
+
+        memories = self.database.get_active_memories()
+
+        updated_count = 0
+
+        for memory in memories:
+
+            embedding = memory[14]
+
+            if embedding is not None:
+                continue
+
+            memory_data = {
+                "category": memory[1],
+                "title": memory[2],
+                "content": memory[3],
+                "date": memory[4],
+                "time": memory[5],
+            }
+
+            self._store_embedding(
+                memory[0],
+                memory_data,
+            )
+
+            updated_count += 1
+
+        return updated_count
+
     def _find_candidates(self, memory):
         """Find similar active memories stored locally."""
 

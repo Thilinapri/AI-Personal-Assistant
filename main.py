@@ -12,6 +12,7 @@ from src.database.database import Database
 from src.memory.memory_manager import MemoryManager
 from src.memory.embedding_service import EmbeddingService
 from src.memory.retrieval_service import RetrievalService
+from src.memory.rule_based_relationship_classifier import RuleBasedRelationshipClassifier
 
 from src.reminder.reminder_manager import ReminderManager
 
@@ -92,6 +93,8 @@ def main():
         embedding_service=embedding_service,
     )
 
+    relationship_classifier = RuleBasedRelationshipClassifier()
+
     # ---------------------------------
     # Reminder Manager
     # ---------------------------------
@@ -108,6 +111,7 @@ def main():
         database=database,
         embedding_service=embedding_service,
         retrieval_service=retrieval_service,
+        relationship_classifier=relationship_classifier,
         reminder_manager=reminder_manager,
     )
 

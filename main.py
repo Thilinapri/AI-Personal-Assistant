@@ -116,6 +116,18 @@ def main():
     )
 
     # ---------------------------------
+    # Prepare Existing Memories
+    # ---------------------------------
+
+    backfilled_count = memory_manager.backfill_missing_embeddings()
+
+    if backfilled_count > 0:
+        print(
+            f"🧠 Prepared {backfilled_count} existing "
+            "memories for semantic search."
+        )
+
+    # ---------------------------------
     # Reminder Worker
     # ---------------------------------
 

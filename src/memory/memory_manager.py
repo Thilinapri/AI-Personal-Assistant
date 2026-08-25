@@ -21,13 +21,31 @@ class MemoryManager:
         self.candidate_threshold = candidate_threshold
 
     def store_memories(self, memories):
-        """Store and manage multiple extracted memories."""
+        """Store multiple memories without one failure stopping the batch."""
 
         if not memories:
-            return
+            return []
+
+        stored_ids = []
 
         for memory in memories:
-            self.store_memory(memory)
+
+            try:
+                memory_id = self.store_memory(memory)
+                stored_ids.append(memory_id)
+
+            except Exception as error:
+                title = memory.get(
+                    "title",
+                    "Unknown memory",
+                )
+
+                print(
+                    f"Memory processing failed "
+                    f"for '{title}': {error}"
+                )
+
+        return stored_ids
 
     def store_memory(self, memory):
         """Store one memory after checking for duplicates or updates."""

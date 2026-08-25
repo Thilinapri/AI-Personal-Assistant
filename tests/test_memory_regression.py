@@ -157,6 +157,72 @@ class MemoryRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(active), 2)
 
+    def test_memory_batch_continues_after_failure(self):
+
+        memories = [
+            {
+                "category": "Task",
+                "title": "First memory",
+                "content": "First valid memory.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+            {
+                "category": "Task",
+                "title": "Broken memory",
+                "content": "This memory will fail.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+            {
+                "category": "Task",
+                "title": "Third memory",
+                "content": "Third valid memory.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+        ]
+
+        original_store_memory = self.memory_manager.store_memory
+
+        def controlled_store(memory):
+
+            if memory["title"] == "Broken memory":
+                raise RuntimeError(
+                    "simulated memory failure"
+                )
+
+            return original_store_memory(memory)
+
+        self.memory_manager.store_memory = controlled_store
+
+        stored_ids = self.memory_manager.store_memories(
+            memories
+        )
+
+        active_memories = self.database.get_active_memories()
+
+        titles = [
+            memory[2]
+            for memory in active_memories
+        ]
+
+        self.assertCountEqual(
+            titles,
+            [
+                "First memory",
+                "Third memory",
+            ],
+        )
+
+        self.assertEqual(
+            len(stored_ids),
+            2,
+        )
+
     def test_semantic_retrieval(self):
         memories = [
             {

@@ -8,11 +8,12 @@ All other conversation remains in the TranscriptBuffer
 and is handled by the 20-minute session analysis.
 """
 
+import re
+
 
 class KeywordFilter:
 
     def __init__(self):
-
         self.keywords = {
             # Wake word
             "echo",
@@ -24,17 +25,24 @@ class KeywordFilter:
             "dont forget",
         }
 
+        # Match keywords as complete words/phrases.
+        patterns = [
+            rf"\b{re.escape(keyword)}\b"
+            for keyword in self.keywords
+        ]
+
+        self._pattern = re.compile(
+            "|".join(patterns),
+            re.IGNORECASE,
+        )
+
     def should_process(self, transcription: str) -> bool:
         """
-        Returns True if the transcription contains
+        Return True if the transcription contains
         an immediate-processing trigger.
         """
 
-        text = transcription.lower()
+        if not transcription:
+            return False
 
-        for keyword in self.keywords:
-
-            if keyword in text:
-                return True
-
-        return False
+        return self._pattern.search(transcription) is not None

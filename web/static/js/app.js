@@ -84,6 +84,63 @@ async function loadMemories() {
 }
 
 
+async function loadReminders() {
+    try {
+        const response = await fetch("/api/reminders");
+        const reminders = await response.json();
+
+        const reminderList =
+            document.getElementById("reminder-list");
+
+        reminderList.innerHTML = "";
+
+        if (reminders.length === 0) {
+            reminderList.textContent =
+                "No reminders scheduled.";
+
+            return;
+        }
+
+        reminders.forEach((reminder) => {
+
+            const card =
+                document.createElement("div");
+
+            card.className = "memory-card";
+
+            card.innerHTML = `
+                <h3>${reminder.title}</h3>
+
+                <p>${reminder.content}</p>
+
+                <p>
+                    <strong>Reminder time:</strong>
+                    ${reminder.reminder_time}
+                </p>
+
+                <p>
+                    <strong>Status:</strong>
+                    ${reminder.status}
+                </p>
+            `;
+
+            reminderList.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error(
+            "Reminder loading failed:",
+            error
+        );
+
+        document.getElementById(
+            "reminder-list"
+        ).textContent =
+            "Failed to load reminders.";
+    }
+}
+
+
 async function searchMemories() {
     const input =
         document.getElementById("memory-search-input");
@@ -173,3 +230,4 @@ document
 
 loadStatus();
 loadMemories();
+loadReminders();

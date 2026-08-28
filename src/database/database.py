@@ -469,6 +469,29 @@ class Database:
                     reminder_id,
                 ))
 
+    def get_all_reminders(self):
+        """Return all reminders with their related memory details."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    reminders.id,
+                    reminders.memory_id,
+                    reminders.reminder_time,
+                    reminders.status,
+                    reminders.created_at,
+                    reminders.triggered_at,
+                    memories.title,
+                    memories.content
+                FROM reminders
+                JOIN memories
+                    ON reminders.memory_id = memories.id
+                ORDER BY reminders.reminder_time ASC
+            """)
+
+            return cursor.fetchall()
+
     def get_all_memories(self):
         """Return all memories for compatibility with existing code."""
 

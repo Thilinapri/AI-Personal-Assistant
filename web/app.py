@@ -61,6 +61,28 @@ def create_app():
 
         return jsonify(result)
 
+    @app.route("/api/reminders")
+    def reminders():
+        rows = database.get_all_reminders()
+
+        result = []
+
+        for row in rows:
+            result.append(
+                {
+                    "id": row[0],
+                    "memory_id": row[1],
+                    "reminder_time": row[2],
+                    "status": row[3],
+                    "created_at": row[4],
+                    "triggered_at": row[5],
+                    "title": row[6],
+                    "content": row[7],
+                }
+            )
+
+        return jsonify(result)
+
     @app.route("/api/memories/search")
     def search_memories():
         query = request.args.get("q", "").strip()

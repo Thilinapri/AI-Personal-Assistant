@@ -1,6 +1,11 @@
 from faster_whisper import WhisperModel
 
-from src.config import WHISPER_MODEL
+from src.config import (
+    WHISPER_MODEL,
+    WHISPER_LANGUAGE,
+    WHISPER_BEAM_SIZE,
+    WHISPER_MIN_SILENCE_MS,
+)
 
 
 class WhisperService:
@@ -24,11 +29,11 @@ class WhisperService:
 
         segments, info = self.model.transcribe(
             audio,
-            language="en",
-            beam_size=5,
+            language=WHISPER_LANGUAGE,
+            beam_size=WHISPER_BEAM_SIZE,
             vad_filter=True,
             vad_parameters={
-                "min_silence_duration_ms": 500,
+                "min_silence_duration_ms": WHISPER_MIN_SILENCE_MS,
             },
         )
 

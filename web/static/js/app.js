@@ -112,6 +112,57 @@ async function toggleListening() {
 }
 
 
+async function clearAllMemories() {
+
+    const confirmation = prompt(
+        "This will permanently delete ALL memories and reminders.\n\nType CLEAR to continue."
+    );
+
+    if (confirmation !== "CLEAR") {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            "/api/memories",
+            {
+                method: "DELETE",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Clear memories failed"
+            );
+        }
+
+        await loadMemories();
+        await loadReminders();
+
+        const resultsContainer =
+            document.getElementById(
+                "search-results"
+            );
+
+        resultsContainer.replaceChildren();
+
+        alert(
+            "All memories and reminders were deleted."
+        );
+
+    } catch (error) {
+        console.error(
+            "Clearing memories failed:",
+            error
+        );
+
+        alert(
+            "Failed to clear memories."
+        );
+    }
+}
+
+
 async function loadMemories() {
     try {
         const response = await fetch("/api/memories");
@@ -424,6 +475,15 @@ document
     .addEventListener(
         "click",
         toggleListening
+    );
+
+document
+    .getElementById(
+        "clear-memories-button"
+    )
+    .addEventListener(
+        "click",
+        clearAllMemories
     );
 
 

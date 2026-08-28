@@ -101,6 +101,17 @@ def create_app():
 
         return jsonify(result)
 
+    @app.route("/api/memories", methods=["DELETE"])
+    def clear_memories():
+        database.delete_all_memories()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "All memories deleted.",
+            }
+        )
+
     @app.route("/api/memories/<int:memory_id>", methods=["DELETE"])
     def delete_memory(memory_id):
         database.delete_memory(memory_id)

@@ -326,6 +326,15 @@ class Database:
                     (memory_id,)
                 )
 
+    def delete_all_memories(self):
+        """Permanently delete all memories and linked reminders."""
+
+        with self.lock:
+            with self.connection:
+                self.connection.execute(
+                    "DELETE FROM memories"
+                )
+
     def get_active_memories(self):
         """Return all memories that are currently active."""
 

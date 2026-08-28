@@ -6,11 +6,86 @@ async function loadStatus() {
         const statusElement =
             document.getElementById("system-status");
 
+        const toggleButton =
+            document.getElementById(
+                "listening-toggle-button"
+            );
+
         statusElement.textContent =
-            `Web: ${data.web} | Database: ${data.database}`;
+            `Web: ${data.web} | Database: ${data.database} | Listening: ${data.listening}`;
+
+        if (data.listening === "active") {
+            toggleButton.textContent =
+                "Pause Listening";
+
+            toggleButton.dataset.enabled =
+                "true";
+        } else {
+            toggleButton.textContent =
+                "Resume Listening";
+
+            toggleButton.dataset.enabled =
+                "false";
+        }
 
     } catch (error) {
         console.error("Status loading failed:", error);
+    }
+}
+
+
+async function toggleListening() {
+
+    const button =
+        document.getElementById(
+            "listening-toggle-button"
+        );
+
+    const currentlyEnabled =
+        button.dataset.enabled === "true";
+
+    const newState =
+        !currentlyEnabled;
+
+    button.disabled = true;
+
+    try {
+        const response = await fetch(
+            "/api/listening",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                },
+
+                body: JSON.stringify({
+                    enabled: newState,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Listening update failed"
+            );
+        }
+
+        await loadStatus();
+
+    } catch (error) {
+        console.error(
+            "Listening control failed:",
+            error
+        );
+
+        alert(
+            "Failed to change listening state."
+        );
+
+    } finally {
+        button.disabled = false;
     }
 }
 
@@ -268,6 +343,15 @@ document
                 searchMemories();
             }
         }
+    );
+
+document
+    .getElementById(
+        "listening-toggle-button"
+    )
+    .addEventListener(
+        "click",
+        toggleListening
     );
 
 

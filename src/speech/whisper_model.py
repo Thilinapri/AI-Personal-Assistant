@@ -23,10 +23,14 @@ class WhisperService:
         audio = audio.flatten()
 
         segments, info = self.model.transcribe(
-            audio,
-            language="en",
-            beam_size=5
-        )
+    audio,
+    language="en",
+    beam_size=5,
+    vad_filter=True,
+    vad_parameters={
+        "min_silence_duration_ms": 500,
+    },
+)
 
         text = ""
 

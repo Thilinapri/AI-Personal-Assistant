@@ -122,3 +122,28 @@ class TranscriptBuffer:
 
         with self._lock:
             self._sentences.clear()
+
+    def clear_through(self, entry_id):
+        """Remove entries up to and including an acknowledged entry ID."""
+
+        with self._lock:
+            self._sentences = [
+                item
+                for item in self._sentences
+                if item["id"] > entry_id
+            ]
+
+    def remove(self, entry_id):
+        """Remove one transcript entry by ID."""
+
+        with self._lock:
+            self._sentences = [
+                item
+                for item in self._sentences
+                if item["id"] != entry_id
+            ]
+
+    def clear(self):
+
+        with self._lock:
+            self._sentences.clear()

@@ -43,9 +43,16 @@ class AudioWorker:
     def process_audio(self, audio):
         """Transcribe one audio segment and process keyword-triggered memories."""
 
+        # -------------------------------------------------
+        # 1. Whisper transcription
+        # -------------------------------------------------
+
         try:
             transcription = self.whisper.transcribe(audio)
-            print(f"\n📝 Whisper transcription: {transcription!r}")
+
+            print(
+                f"\n📝 Whisper transcription: {transcription!r}"
+            )
 
         except Exception as error:
             print(f"Whisper transcription failed: {error}")
@@ -56,31 +63,50 @@ class AudioWorker:
 
         transcription = transcription.strip()
 
+        # -------------------------------------------------
+        # 2. Add transcription to conversation buffer
+        # -------------------------------------------------
+
         try:
-            # Every non-empty transcription stays in the local conversation buffer.
             entry_id, context = self.transcript_buffer.add_with_context(
                 transcription,
                 before=2,
                 after=0,
             )
 
-            print(f"📥 Transcript buffered: {transcription}")
+            print(
+                f"📥 Transcript buffered: {transcription}"
+            )
 
         except Exception as error:
             print(f"Transcript buffering failed: {error}")
             return
 
-        try:
-            should_process = self.keyword_filter.should_process(transcription)
+        # -------------------------------------------------
+        # 3. Check for immediate keywords
+        # -------------------------------------------------
 
-            print(f"🔎 Keyword detected: {should_process}")
+        try:
+            should_process = (
+                self.keyword_filter.should_process(transcription)
+            )
+
+            print(
+                f"🔎 Keyword detected: {should_process}"
+            )
 
         except Exception as error:
             print(f"Keyword detection failed: {error}")
             return
 
+        # No keyword → keep transcript in buffer.
+        # It will be processed by SessionProcessor every 20 minutes.
         if not should_process:
             return
+
+        # -------------------------------------------------
+        # 4. Immediate Gemini processing
+        # -------------------------------------------------
 
         try:
             print("📋 Immediate context:")
@@ -94,24 +120,52 @@ class AudioWorker:
                 current_time=datetime.now(),
             )
 
-            print(f"🤖 Gemini result: {result!r}")
+            print(
+                f"🤖 Gemini result: {result!r}"
+            )
 
             memories = result["memories"]
 
-            print(f"🧠 Memories extracted: {memories!r}")
+            print(
+                f"🧠 Memories extracted: {memories!r}"
+            )
 
         except Exception as error:
-            # The transcription remains buffered for later processing.
-            print(f"Immediate memory processing failed: {error}")
+            # Keep the transcript in the buffer if Gemini fails.
+            print(
+                f"Immediate memory processing failed: {error}"
+            )
             return
 
+        # -------------------------------------------------
+        # 5. Nothing to save
+        # -------------------------------------------------
+
         if not memories:
+            print("ℹ️ Gemini found no memories.")
             return
+
+        # -------------------------------------------------
+        # 6. Save memories to database
+        # -------------------------------------------------
 
         try:
             self.database.save_memories(memories)
+
             print("💾 Memories saved to database.")
 
+            # This transcription has already been processed
+            # immediately, so don't process it again during
+            # the 20-minute session analysis.
+
+            self.transcript_buffer.remove(entry_id)
+
+            print(
+                "🗑️ Immediate transcript removed from session buffer."
+            )
+
         except Exception as error:
-            # The transcription remains buffered even if persistence fails.
-            print(f"Saving memories failed: {error}")
+            # Keep the transcript in the buffer if saving fails.
+            print(
+                f"Saving memories failed: {error}"
+            )

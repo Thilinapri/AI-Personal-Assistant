@@ -1,3 +1,25 @@
+function createDetailRow(label, value) {
+    const paragraph =
+        document.createElement("p");
+
+    const labelElement =
+        document.createElement("strong");
+
+    labelElement.textContent =
+        `${label}: `;
+
+    paragraph.appendChild(
+        labelElement
+    );
+
+    paragraph.appendChild(
+        document.createTextNode(value)
+    );
+
+    return paragraph;
+}
+
+
 async function loadStatus() {
     try {
         const response = await fetch("/api/status");
@@ -98,7 +120,7 @@ async function loadMemories() {
         const memoryList =
             document.getElementById("memory-list");
 
-        memoryList.innerHTML = "";
+        memoryList.replaceChildren();
 
         if (memories.length === 0) {
             memoryList.textContent =
@@ -114,45 +136,71 @@ async function loadMemories() {
 
             card.className = "memory-card";
 
-            card.innerHTML = `
-                <h3>${memory.title}</h3>
+            const title =
+                document.createElement("h3");
 
-                <p>
-                    ${memory.content}
-                </p>
+            title.textContent =
+                memory.title;
 
-                <p>
-                    <strong>Category:</strong>
-                    ${memory.category}
-                </p>
+            const content =
+                document.createElement("p");
 
-                <p>
-                    <strong>Date:</strong>
-                    ${memory.date || "Not specified"}
-                </p>
+            content.textContent =
+                memory.content;
 
-                <p>
-                    <strong>Time:</strong>
-                    ${memory.time || "Not specified"}
-                </p>
+            const deleteButton =
+                document.createElement("button");
 
-                <p>
-                    <strong>Status:</strong>
-                    ${memory.status}
-                </p>
+            deleteButton.className =
+                "delete-memory-button";
 
-                <p>
-                    <strong>Seen:</strong>
-                    ${memory.seen_count} time(s)
-                </p>
+            deleteButton.textContent =
+                "Delete";
 
-                <button
-                    class="delete-memory-button"
-                    onclick="deleteMemory(${memory.id})"
-                >
-                    Delete
-                </button>
-            `;
+            deleteButton.addEventListener(
+                "click",
+                () => deleteMemory(memory.id)
+            );
+
+            card.appendChild(title);
+            card.appendChild(content);
+
+            card.appendChild(
+                createDetailRow(
+                    "Category",
+                    memory.category
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Date",
+                    memory.date || "Not specified"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Time",
+                    memory.time || "Not specified"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Status",
+                    memory.status
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Seen",
+                    `${memory.seen_count} time(s)`
+                )
+            );
+
+            card.appendChild(deleteButton);
 
             memoryList.appendChild(card);
         });
@@ -174,7 +222,7 @@ async function loadReminders() {
         const reminderList =
             document.getElementById("reminder-list");
 
-        reminderList.innerHTML = "";
+        reminderList.replaceChildren();
 
         if (reminders.length === 0) {
             reminderList.textContent =
@@ -190,21 +238,34 @@ async function loadReminders() {
 
             card.className = "memory-card";
 
-            card.innerHTML = `
-                <h3>${reminder.title}</h3>
+            const title =
+                document.createElement("h3");
 
-                <p>${reminder.content}</p>
+            title.textContent =
+                reminder.title;
 
-                <p>
-                    <strong>Reminder time:</strong>
-                    ${reminder.reminder_time}
-                </p>
+            const content =
+                document.createElement("p");
 
-                <p>
-                    <strong>Status:</strong>
-                    ${reminder.status}
-                </p>
-            `;
+            content.textContent =
+                reminder.content;
+
+            card.appendChild(title);
+            card.appendChild(content);
+
+            card.appendChild(
+                createDetailRow(
+                    "Reminder time",
+                    reminder.reminder_time
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Status",
+                    reminder.status
+                )
+            );
 
             reminderList.appendChild(card);
         });
@@ -285,7 +346,7 @@ async function searchMemories() {
 
         const results = await response.json();
 
-        resultsContainer.innerHTML = "";
+        resultsContainer.replaceChildren();
 
         if (results.length === 0) {
             resultsContainer.textContent =
@@ -301,16 +362,27 @@ async function searchMemories() {
 
             card.className = "memory-card";
 
-            card.innerHTML = `
-                <h3>${memory.title}</h3>
+            const title =
+                document.createElement("h3");
 
-                <p>${memory.content}</p>
+            title.textContent =
+                memory.title;
 
-                <p>
-                    <strong>Similarity:</strong>
-                    ${memory.score.toFixed(3)}
-                </p>
-            `;
+            const content =
+                document.createElement("p");
+
+            content.textContent =
+                memory.content;
+
+            card.appendChild(title);
+            card.appendChild(content);
+
+            card.appendChild(
+                createDetailRow(
+                    "Similarity",
+                    memory.score.toFixed(3)
+                )
+            );
 
             resultsContainer.appendChild(card);
         });

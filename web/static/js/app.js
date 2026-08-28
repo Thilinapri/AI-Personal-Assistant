@@ -199,6 +199,20 @@ async function loadMemories() {
             content.textContent =
                 memory.content;
 
+            const editButton =
+                document.createElement("button");
+
+            editButton.className =
+                "edit-memory-button";
+
+            editButton.textContent =
+                "Edit";
+
+            editButton.addEventListener(
+                "click",
+                () => showEditForm(memory, card)
+            );
+
             const deleteButton =
                 document.createElement("button");
 
@@ -251,7 +265,16 @@ async function loadMemories() {
                 )
             );
 
-            card.appendChild(deleteButton);
+            const actions =
+                document.createElement("div");
+
+            actions.className =
+                "memory-actions";
+
+            actions.appendChild(editButton);
+            actions.appendChild(deleteButton);
+
+            card.appendChild(actions);
 
             memoryList.appendChild(card);
         });
@@ -331,6 +354,239 @@ async function loadReminders() {
             "reminder-list"
         ).textContent =
             "Failed to load reminders.";
+    }
+}
+
+
+function showEditForm(memory, card) {
+
+    const form =
+        document.createElement("form");
+
+    form.className =
+        "memory-edit-form";
+
+    const titleLabel =
+        document.createElement("label");
+
+    titleLabel.textContent = "Title";
+
+    const titleInput =
+        document.createElement("input");
+
+    titleInput.type = "text";
+    titleInput.value = memory.title;
+
+    const contentLabel =
+        document.createElement("label");
+
+    contentLabel.textContent = "Content";
+
+    const contentInput =
+        document.createElement("textarea");
+
+    contentInput.value = memory.content;
+
+    const categoryLabel =
+        document.createElement("label");
+
+    categoryLabel.textContent = "Category";
+
+    const categoryInput =
+        document.createElement("input");
+
+    categoryInput.type = "text";
+    categoryInput.value = memory.category;
+
+    const dateLabel =
+        document.createElement("label");
+
+    dateLabel.textContent = "Date";
+
+    const dateInput =
+        document.createElement("input");
+
+    dateInput.type = "date";
+    dateInput.value = memory.date || "";
+
+    const timeLabel =
+        document.createElement("label");
+
+    timeLabel.textContent = "Time";
+
+    const timeInput =
+        document.createElement("input");
+
+    timeInput.type = "time";
+    timeInput.value = memory.time || "";
+
+    const notificationLabel =
+        document.createElement("label");
+
+    const notificationInput =
+        document.createElement("input");
+
+    notificationInput.type = "checkbox";
+    notificationInput.checked =
+        memory.notification;
+
+    notificationLabel.appendChild(
+        notificationInput
+    );
+
+    notificationLabel.appendChild(
+        document.createTextNode(
+            " Enable reminder"
+        )
+    );
+
+    const saveButton =
+        document.createElement("button");
+
+    saveButton.type = "submit";
+    saveButton.textContent = "Save";
+
+    const cancelButton =
+        document.createElement("button");
+
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+
+    cancelButton.addEventListener(
+        "click",
+        loadMemories
+    );
+
+    form.appendChild(titleLabel);
+    form.appendChild(titleInput);
+
+    form.appendChild(contentLabel);
+    form.appendChild(contentInput);
+
+    form.appendChild(categoryLabel);
+    form.appendChild(categoryInput);
+
+    form.appendChild(dateLabel);
+    form.appendChild(dateInput);
+
+    form.appendChild(timeLabel);
+    form.appendChild(timeInput);
+
+    form.appendChild(notificationLabel);
+
+    const actions =
+        document.createElement("div");
+
+    actions.className =
+        "memory-actions";
+
+    actions.appendChild(saveButton);
+    actions.appendChild(cancelButton);
+
+    form.appendChild(actions);
+
+    form.addEventListener(
+        "submit",
+        async function (event) {
+
+            event.preventDefault();
+
+            const updatedMemory = {
+                category:
+                    categoryInput.value.trim(),
+
+                title:
+                    titleInput.value.trim(),
+
+                content:
+                    contentInput.value.trim(),
+
+                date:
+                    dateInput.value,
+
+                time:
+                    timeInput.value,
+
+                notification:
+                    notificationInput.checked,
+            };
+
+            await saveMemoryEdit(
+                memory.id,
+                updatedMemory
+            );
+        }
+    );
+
+    card.replaceChildren(form);
+}
+
+
+async function saveMemoryEdit(
+    memoryId,
+    memory
+) {
+
+    if (
+        !memory.title
+        || !memory.content
+        || !memory.category
+    ) {
+        alert(
+            "Title, content and category are required."
+        );
+
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/api/memories/${memoryId}`,
+            {
+                method: "PUT",
+
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                },
+
+                body: JSON.stringify(
+                    memory
+                ),
+            }
+        );
+
+        if (!response.ok) {
+
+            const errorData =
+                await response.json();
+
+            throw new Error(
+                errorData.error
+                || "Edit failed"
+            );
+        }
+
+        await loadMemories();
+        await loadReminders();
+
+        const searchResults =
+            document.getElementById(
+                "search-results"
+            );
+
+        searchResults.replaceChildren();
+
+    } catch (error) {
+
+        console.error(
+            "Memory editing failed:",
+            error
+        );
+
+        alert(
+            `Failed to edit memory: ${error.message}`
+        );
     }
 }
 

@@ -8,9 +8,18 @@ from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
+
+from src.memory.memory_manager import MemoryManager
+from src.memory.embedding_service import EmbeddingService
+from src.memory.retrieval_service import RetrievalService
+from src.memory.rule_based_relationship_classifier import RuleBasedRelationshipClassifier
+
+from src.reminder.reminder_manager import ReminderManager
+
 from src.worker.audio_worker import AudioWorker
 from src.worker.continuous_transcriber import ContinuousTranscriber
 from src.worker.session_processor import SessionProcessor
+from src.worker.reminder_worker import ReminderWorker
 
 
 def configure_console_output():
@@ -25,6 +34,7 @@ def shutdown_components(
     microphone,
     continuous_transcriber,
     session_processor,
+    reminder_worker,
     audio_queue,
     worker_thread,
     database,
@@ -33,7 +43,7 @@ def shutdown_components(
 
     print("\nStopping Assistant...")
 
-    # Stop microphone capture thread first.
+    # Stop microphone capture first.
     continuous_transcriber.stop()
     continuous_transcriber.join()
 
@@ -43,11 +53,15 @@ def shutdown_components(
     # Tell AudioWorker that no more audio will arrive.
     audio_queue.put(None)
 
-    # Wait for both workers to finish.
+    # Wait for workers to finish.
     session_processor.join()
     worker_thread.join()
 
-    # Only close shared resources after workers have stopped.
+    # Stop reminder checking before closing the database.
+    reminder_worker.stop()
+    reminder_worker.join()
+
+    # Close shared resources last.
     database.close()
     microphone.stop()
 
@@ -67,6 +81,50 @@ def main():
     # ---------------------------------
 
     database = Database()
+
+    # ---------------------------------
+    # Local Memory AI Components
+    # ---------------------------------
+
+    embedding_service = EmbeddingService()
+
+    retrieval_service = RetrievalService(
+        database=database,
+        embedding_service=embedding_service,
+    )
+
+    relationship_classifier = RuleBasedRelationshipClassifier()
+
+    # ---------------------------------
+    # Reminder Manager
+    # ---------------------------------
+
+    reminder_manager = ReminderManager(
+        database=database,
+    )
+
+    # ---------------------------------
+    # Memory Manager
+    # ---------------------------------
+
+    memory_manager = MemoryManager(
+        database=database,
+        embedding_service=embedding_service,
+        retrieval_service=retrieval_service,
+        relationship_classifier=relationship_classifier,
+        reminder_manager=reminder_manager,
+    )
+
+    # ---------------------------------
+    # Reminder Worker
+    # ---------------------------------
+
+    reminder_worker = ReminderWorker(
+        reminder_manager=reminder_manager,
+        check_interval=30,
+    )
+
+    reminder_worker.start()
 
     # ---------------------------------
     # Microphone
@@ -103,7 +161,7 @@ def main():
         transcript_buffer=transcript_buffer,
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
-        database=database,
+        memory_manager=memory_manager,
     )
 
     worker_thread = threading.Thread(
@@ -132,7 +190,7 @@ def main():
     session_processor = SessionProcessor(
         transcript_buffer=transcript_buffer,
         memory_engine=memory_engine,
-        database=database,
+        memory_manager=memory_manager,
     )
 
     session_processor.start()
@@ -152,8 +210,7 @@ def main():
             threading.Event().wait(1)
 
     except KeyboardInterrupt:
-
-        print("\nStopping Assistant...")
+        pass
 
     finally:
 
@@ -161,6 +218,7 @@ def main():
             microphone=microphone,
             continuous_transcriber=continuous_transcriber,
             session_processor=session_processor,
+            reminder_worker=reminder_worker,
             audio_queue=audio_queue,
             worker_thread=worker_thread,
             database=database,

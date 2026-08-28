@@ -133,8 +133,17 @@ class TranscriptBuffer:
                 if item["id"] > entry_id
             ]
 
+    def clear_through(self, entry_id):
+        """Remove entries up to and including an acknowledged entry ID."""
+
+        with self._lock:
+            self._sentences = [
+                item for item in self._sentences
+                if item["id"] > entry_id
+            ]
+
     def remove(self, entry_id):
-        """Remove one transcript entry by ID."""
+        """Remove one specific transcript entry."""
 
         with self._lock:
             self._sentences = [

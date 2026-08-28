@@ -299,6 +299,16 @@ class Database:
 
             return cursor.fetchone()
 
+    def delete_memory(self, memory_id):
+        """Permanently delete a memory and its linked reminders."""
+
+        with self.lock:
+            with self.connection:
+                self.connection.execute(
+                    "DELETE FROM memories WHERE id = ?",
+                    (memory_id,)
+                )
+
     def get_active_memories(self):
         """Return all memories that are currently active."""
 

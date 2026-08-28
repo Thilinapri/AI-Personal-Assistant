@@ -54,3 +54,11 @@ section {
 .memory-card p {
     margin: 6px 0;
 }
+
+.delete-memory-button {
+    margin-top: 12px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}

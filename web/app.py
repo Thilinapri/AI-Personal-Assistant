@@ -61,6 +61,17 @@ def create_app():
 
         return jsonify(result)
 
+    @app.route("/api/memories/<int:memory_id>", methods=["DELETE"])
+    def delete_memory(memory_id):
+        database.delete_memory(memory_id)
+
+        return jsonify(
+            {
+                "success": True,
+                "memory_id": memory_id,
+            }
+        )
+
     @app.route("/api/reminders")
     def reminders():
         rows = database.get_all_reminders()

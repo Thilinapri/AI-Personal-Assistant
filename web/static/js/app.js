@@ -70,6 +70,13 @@ async function loadMemories() {
                     <strong>Seen:</strong>
                     ${memory.seen_count} time(s)
                 </p>
+
+                <button
+                    class="delete-memory-button"
+                    onclick="deleteMemory(${memory.id})"
+                >
+                    Delete
+                </button>
             `;
 
             memoryList.appendChild(card);
@@ -137,6 +144,42 @@ async function loadReminders() {
             "reminder-list"
         ).textContent =
             "Failed to load reminders.";
+    }
+}
+
+
+async function deleteMemory(memoryId) {
+
+    const confirmed = confirm(
+        "Are you sure you want to delete this memory?"
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/api/memories/${memoryId}`,
+            {
+                method: "DELETE",
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Delete failed");
+        }
+
+        loadMemories();
+        loadReminders();
+
+    } catch (error) {
+        console.error(
+            "Memory deletion failed:",
+            error
+        );
+
+        alert("Failed to delete memory.");
     }
 }
 

@@ -2,7 +2,9 @@ from flask import Flask, jsonify, render_template, request
 
 from src.database.database import Database
 from src.memory.embedding_service import EmbeddingService
+from src.memory.memory_manager import MemoryManager
 from src.memory.retrieval_service import RetrievalService
+from src.reminder.reminder_manager import ReminderManager
 
 
 def create_app():
@@ -15,6 +17,17 @@ def create_app():
     retrieval_service = RetrievalService(
         database,
         embedding_service,
+    )
+
+    reminder_manager = ReminderManager(
+        database=database,
+    )
+
+    memory_manager = MemoryManager(
+        database=database,
+        embedding_service=embedding_service,
+        retrieval_service=retrieval_service,
+        reminder_manager=reminder_manager,
     )
 
     @app.route("/")
@@ -115,6 +128,93 @@ def create_app():
     @app.route("/api/memories/<int:memory_id>", methods=["DELETE"])
     def delete_memory(memory_id):
         database.delete_memory(memory_id)
+
+        return jsonify(
+            {
+                "success": True,
+                "memory_id": memory_id,
+            }
+        )
+
+    @app.route(
+        "/api/memories/<int:memory_id>",
+        methods=["PUT"],
+    )
+    def update_memory(memory_id):
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify(
+                {
+                    "error": "JSON body is required."
+                }
+            ), 400
+
+        required_fields = {
+            "category",
+            "title",
+            "content",
+            "date",
+            "time",
+            "notification",
+        }
+
+        missing = required_fields - data.keys()
+
+        if missing:
+            return jsonify(
+                {
+                    "error":
+                        "Missing fields: "
+                        + ", ".join(sorted(missing))
+                }
+            ), 400
+
+        if (
+            not isinstance(data["category"], str)
+            or not data["category"].strip()
+        ):
+            return jsonify(
+                {"error": "Category is required."}
+            ), 400
+
+        if (
+            not isinstance(data["title"], str)
+            or not data["title"].strip()
+        ):
+            return jsonify(
+                {"error": "Title is required."}
+            ), 400
+
+        if (
+            not isinstance(data["content"], str)
+            or not data["content"].strip()
+        ):
+            return jsonify(
+                {"error": "Content is required."}
+            ), 400
+
+        if not isinstance(data["notification"], bool):
+            return jsonify(
+                {
+                    "error":
+                        "notification must be true or false."
+                }
+            ), 400
+
+        updated = memory_manager.update_memory(
+            memory_id,
+            data,
+        )
+
+        if not updated:
+            return jsonify(
+                {
+                    "error":
+                        "Active memory not found."
+                }
+            ), 404
 
         return jsonify(
             {

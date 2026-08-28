@@ -326,6 +326,36 @@ class Database:
                     (memory_id,)
                 )
 
+    def update_memory(self, memory_id, memory):
+        """Update one existing active memory."""
+
+        with self.lock:
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        category = ?,
+                        title = ?,
+                        content = ?,
+                        date = ?,
+                        time = ?,
+                        notification = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND status = 'active'
+                """, (
+                    memory["category"],
+                    memory["title"],
+                    memory["content"],
+                    memory["date"],
+                    memory["time"],
+                    int(memory["notification"]),
+                    memory_id,
+                ))
+
+                return cursor.rowcount > 0
+
     def delete_all_memories(self):
         """Permanently delete all memories and linked reminders."""
 

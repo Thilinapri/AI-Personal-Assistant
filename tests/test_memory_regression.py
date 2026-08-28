@@ -86,6 +86,80 @@ class MemoryRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0][1], "active")
         self.assertEqual(rows[0][2], 2)
 
+    def test_user_edit_updates_memory_embedding_and_reminder(self):
+
+        original = {
+            "category": "Event",
+            "title": "Project meeting",
+            "content": "Project meeting is at 2 PM.",
+            "date": "2099-01-01",
+            "time": "14:00",
+            "notification": True,
+        }
+
+        memory_id = self.memory_manager.store_memory(
+            original
+        )
+
+        edited = {
+            "category": "Event",
+            "title": "Project meeting",
+            "content": "Project meeting is at 5 PM.",
+            "date": "2099-01-01",
+            "time": "17:00",
+            "notification": True,
+        }
+
+        updated = self.memory_manager.update_memory(
+            memory_id,
+            edited,
+        )
+
+        memory = self.database.get_memory(
+            memory_id
+        )
+
+        reminders = self.database.connection.execute(
+            """
+            SELECT reminder_time, status
+            FROM reminders
+            WHERE memory_id = ?
+            ORDER BY id
+            """,
+            (memory_id,),
+        ).fetchall()
+
+        self.assertTrue(updated)
+
+        self.assertEqual(
+            memory[3],
+            "Project meeting is at 5 PM."
+        )
+
+        self.assertEqual(
+            memory[5],
+            "17:00"
+        )
+
+        self.assertIsNotNone(
+            memory[14]
+        )
+
+        self.assertEqual(
+            reminders[0][1],
+            "cancelled"
+        )
+
+        self.assertEqual(
+            reminders[1][0],
+            "2099-01-01 16:30:00"
+        )
+
+        self.assertEqual(
+            reminders[1][1],
+            "pending"
+        )
+
     def test_update_memory_and_reminder(self):
         old_memory = {
             "category": "Event",

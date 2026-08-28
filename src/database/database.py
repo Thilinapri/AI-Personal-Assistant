@@ -75,6 +75,23 @@ class Database:
         )
         """)
 
+        # ---------------------------------
+        # System Settings Table
+        # ---------------------------------
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """)
+
+        self.cursor.execute("""
+        INSERT OR IGNORE INTO system_settings
+        (key, value)
+        VALUES ('listening_enabled', '1')
+        """)
+
         self.connection.commit()
 
     def migrate_memories_table(self):
@@ -522,6 +539,42 @@ class Database:
             """)
 
             return self.cursor.fetchall()
+
+    def get_listening_enabled(self):
+        """Return whether EchoMind is allowed to capture audio."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT value
+                FROM system_settings
+                WHERE key = 'listening_enabled'
+            """)
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return True
+
+            return row[0] == "1"
+
+    def set_listening_enabled(self, enabled):
+        """Enable or pause conversational audio capture."""
+
+        value = "1" if enabled else "0"
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    INSERT INTO system_settings
+                    (key, value)
+                    VALUES ('listening_enabled', ?)
+
+                    ON CONFLICT(key)
+                    DO UPDATE SET value = excluded.value
+                """, (value,))
 
     def close(self):
 

@@ -30,11 +30,51 @@ def create_app():
         except Exception:
             database_status = "error"
 
+        listening_enabled = (
+            database.get_listening_enabled()
+        )
+
         return jsonify(
             {
                 "application": "EchoMind",
                 "web": "running",
                 "database": database_status,
+                "listening": (
+                    "active"
+                    if listening_enabled
+                    else "paused"
+                ),
+            }
+        )
+
+    @app.route(
+        "/api/listening",
+        methods=["POST"],
+    )
+    def update_listening():
+
+        data = request.get_json(silent=True) or {}
+
+        enabled = data.get("enabled")
+
+        if not isinstance(enabled, bool):
+            return jsonify(
+                {
+                    "error":
+                        "enabled must be true or false"
+                }
+            ), 400
+
+        database.set_listening_enabled(enabled)
+
+        return jsonify(
+            {
+                "success": True,
+                "listening": (
+                    "active"
+                    if enabled
+                    else "paused"
+                ),
             }
         )
 

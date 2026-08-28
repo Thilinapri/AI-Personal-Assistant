@@ -197,6 +197,7 @@ def main():
     continuous_transcriber = ContinuousTranscriber(
         microphone=microphone,
         audio_queue=audio_queue,
+        database=database,
     )
 
     continuous_transcriber.start()

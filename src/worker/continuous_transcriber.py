@@ -15,9 +15,10 @@ class ContinuousTranscriber:
 
     CHUNK_SECONDS = 20
 
-    def __init__(self, microphone, audio_queue):
+    def __init__(self, microphone, audio_queue, database):
         self.microphone = microphone
         self.audio_queue = audio_queue
+        self.database = database
 
         self.blocks_per_chunk = int(
             self.CHUNK_SECONDS * SAMPLE_RATE / BLOCK_SIZE
@@ -57,9 +58,54 @@ class ContinuousTranscriber:
         print("\n🎧 Continuous listening started...\n")
 
         audio_blocks = []
+        is_paused = False
 
         try:
             while not self._stop_event.is_set():
+
+                listening_enabled = (
+                    self.database.get_listening_enabled()
+                )
+
+                # ---------------------------------
+                # Pause Listening
+                # ---------------------------------
+
+                if not listening_enabled:
+
+                    if not is_paused:
+                        audio_blocks.clear()
+
+                        self.microphone.stop()
+
+                        is_paused = True
+
+                        print(
+                            "⏸️ Listening paused. "
+                            "Microphone capture stopped."
+                        )
+
+                    self._stop_event.wait(0.5)
+                    continue
+
+                # ---------------------------------
+                # Resume Listening
+                # ---------------------------------
+
+                if is_paused:
+
+                    self.microphone.start()
+
+                    is_paused = False
+
+                    print(
+                        "▶️ Listening resumed. "
+                        "Microphone capture started."
+                    )
+
+                # ---------------------------------
+                # Capture Audio
+                # ---------------------------------
 
                 audio = self.microphone.read()
                 audio_blocks.append(audio)
@@ -82,7 +128,12 @@ class ContinuousTranscriber:
                 self.audio_queue.put(chunk)
 
         except Exception as error:
-            print(f"Continuous transcription capture error: {error}")
+            print(
+                f"Continuous transcription "
+                f"capture error: {error}"
+            )
 
         finally:
-            print("🎧 Continuous listening stopped.")
+            print(
+                "🎧 Continuous listening stopped."
+            )

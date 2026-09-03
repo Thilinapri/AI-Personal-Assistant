@@ -42,6 +42,7 @@ def shutdown_components(
     reminder_worker,
     web_server,
     audio_queue,
+    worker,
     worker_thread,
     database,
 ):
@@ -56,7 +57,18 @@ def shutdown_components(
     # Stop periodic session processing.
     session_processor.stop()
 
-    # Tell AudioWorker that no more audio will arrive.
+    # Prevent AudioWorker from processing any more queued audio.
+    worker.stop()
+
+    # Remove any audio chunks that are still waiting.
+    while True:
+        try:
+            audio_queue.get_nowait()
+            audio_queue.task_done()
+        except queue.Empty:
+            break
+
+    # Wake AudioWorker and tell it to exit.
     audio_queue.put(None)
 
     # Wait for workers to finish.
@@ -275,6 +287,7 @@ def main():
             reminder_worker=reminder_worker,
             web_server=web_server,
             audio_queue=audio_queue,
+            worker=worker,
             worker_thread=worker_thread,
             database=database,
         )

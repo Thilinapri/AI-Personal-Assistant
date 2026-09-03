@@ -7,28 +7,41 @@ from src.memory.retrieval_service import RetrievalService
 from src.reminder.reminder_manager import ReminderManager
 
 
-def create_app():
+def create_app(
+    database=None,
+    embedding_service=None,
+    retrieval_service=None,
+    reminder_manager=None,
+    memory_manager=None,
+):
     app = Flask(__name__)
 
-    database = Database()
+    # If the dashboard is started by itself,
+    # create its required services normally.
+    if database is None:
+        database = Database()
 
-    embedding_service = EmbeddingService()
+    if embedding_service is None:
+        embedding_service = EmbeddingService()
 
-    retrieval_service = RetrievalService(
-        database,
-        embedding_service,
-    )
+    if retrieval_service is None:
+        retrieval_service = RetrievalService(
+            database=database,
+            embedding_service=embedding_service,
+        )
 
-    reminder_manager = ReminderManager(
-        database=database,
-    )
+    if reminder_manager is None:
+        reminder_manager = ReminderManager(
+            database=database,
+        )
 
-    memory_manager = MemoryManager(
-        database=database,
-        embedding_service=embedding_service,
-        retrieval_service=retrieval_service,
-        reminder_manager=reminder_manager,
-    )
+    if memory_manager is None:
+        memory_manager = MemoryManager(
+            database=database,
+            embedding_service=embedding_service,
+            retrieval_service=retrieval_service,
+            reminder_manager=reminder_manager,
+        )
 
     @app.route("/")
     def index():

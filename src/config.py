@@ -19,4 +19,5 @@ WHISPER_MIN_SILENCE_MS = 500
 # Gemini
 # ===========================
 
+ENABLE_GEMINI = False
 GEMINI_MODEL = "gemini-3.6-flash"

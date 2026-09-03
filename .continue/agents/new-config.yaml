@@ -1,0 +1,21 @@
+name: Local Qwen
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Qwen2.5 Coder 3B
+    provider: lmstudio
+    model: qwen2.5-coder-3b-instruct
+    apiBase: http://localhost:1234/v1
+    roles:
+      - chat
+      - edit
+      - apply
+
+context:
+  - provider: file
+  - provider: code
+  - provider: tree
+  - provider: repo-map
+  - provider: terminal
+  - provider: problems

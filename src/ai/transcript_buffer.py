@@ -5,7 +5,6 @@ import threading
 class TranscriptBuffer:
 
     def __init__(self):
-
         self._lock = threading.RLock()
         self._sentences = []
         self._next_entry_id = 1
@@ -47,8 +46,10 @@ class TranscriptBuffer:
             index = len(self._sentences) - 1
             start = max(0, index - before)
             end = min(len(self._sentences), index + after + 1)
+
             context = "\n".join(
-                entry["text"] for entry in self._sentences[start:end]
+                entry["text"]
+                for entry in self._sentences[start:end]
             )
 
             return entry_id, context
@@ -84,11 +85,15 @@ class TranscriptBuffer:
                 if item["id"] == entry_id:
                     start = max(0, index - before)
                     end = min(len(self._sentences), index + after + 1)
+
                     return "\n".join(
-                        entry["text"] for entry in self._sentences[start:end]
+                        entry["text"]
+                        for entry in self._sentences[start:end]
                     )
 
-        raise ValueError(f"Transcript entry ID not found: {entry_id}")
+        raise ValueError(
+            f"Transcript entry ID not found: {entry_id}"
+        )
 
     def get_all_text(self):
 
@@ -103,7 +108,11 @@ class TranscriptBuffer:
 
         with self._lock:
             entries = [item.copy() for item in self._sentences]
-            last_entry_id = entries[-1]["id"] if entries else None
+            last_entry_id = (
+                entries[-1]["id"]
+                if entries
+                else None
+            )
 
             return {
                 "entries": entries,
@@ -115,10 +124,22 @@ class TranscriptBuffer:
 
         with self._lock:
             self._sentences = [
-                item for item in self._sentences if item["id"] > entry_id
+                item
+                for item in self._sentences
+                if item["id"] > entry_id
             ]
 
     def clear(self):
 
         with self._lock:
             self._sentences.clear()
+
+    def remove(self, entry_id):
+        """Remove one specific transcript entry."""
+
+        with self._lock:
+            self._sentences = [
+                item
+                for item in self._sentences
+                if item["id"] != entry_id
+            ]

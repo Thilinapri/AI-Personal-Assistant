@@ -8,7 +8,7 @@ from src.config import SAMPLE_RATE, BLOCK_SIZE
 class ContinuousTranscriber:
     """
     Continuously captures microphone audio and places fixed-duration
-    audio chunks onto the existing AudioWorker queue.
+    audio chunks onto the AudioWorker queue.
 
     Whisper performs speech detection inside each chunk using Silero VAD.
     """
@@ -24,13 +24,20 @@ class ContinuousTranscriber:
             self.CHUNK_SECONDS * SAMPLE_RATE / BLOCK_SIZE
         )
 
+        self.chunk_samples = (
+            self.blocks_per_chunk * BLOCK_SIZE
+        )
+
         self._stop_event = threading.Event()
         self._thread = None
 
     def start(self):
         """Start continuous microphone capture."""
 
-        if self._thread is not None and self._thread.is_alive():
+        if (
+            self._thread is not None
+            and self._thread.is_alive()
+        ):
             return
 
         self._stop_event.clear()
@@ -55,9 +62,16 @@ class ContinuousTranscriber:
             self._thread.join(timeout=timeout)
 
     def _run(self):
-        print("\n🎧 Continuous listening started...\n")
+        print(
+            "\n🎧 Continuous listening started...\n"
+        )
 
-        audio_blocks = []
+        audio_buffer = np.empty(
+            self.chunk_samples,
+            dtype=np.float32,
+        )
+
+        position = 0
         is_paused = False
 
         try:
@@ -74,7 +88,8 @@ class ContinuousTranscriber:
                 if not listening_enabled:
 
                     if not is_paused:
-                        audio_blocks.clear()
+                        # Discard any partially captured audio.
+                        position = 0
 
                         self.microphone.stop()
 
@@ -108,17 +123,20 @@ class ContinuousTranscriber:
                 # ---------------------------------
 
                 audio = self.microphone.read()
-                audio_blocks.append(audio)
 
-                if len(audio_blocks) < self.blocks_per_chunk:
+                samples = audio.shape[0]
+
+                audio_buffer[
+                    position:position + samples
+                ] = audio[:, 0]
+
+                position += samples
+
+                if position < self.chunk_samples:
                     continue
 
-                chunk = np.concatenate(
-                    audio_blocks,
-                    axis=0,
-                )
-
-                audio_blocks.clear()
+                chunk = audio_buffer.copy()
+                position = 0
 
                 print(
                     f"🎙️ Audio chunk ready "
@@ -129,7 +147,7 @@ class ContinuousTranscriber:
 
         except Exception as error:
             print(
-                f"Continuous transcription "
+                "Continuous transcription "
                 f"capture error: {error}"
             )
 

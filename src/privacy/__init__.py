@@ -1,4 +1,8 @@
 from src.privacy.privacy_capsule import PrivacyCapsule
+from src.privacy.privacy_policy import (
+    PrivacyDecision,
+    PrivacyPolicy,
+)
 from src.privacy.sensitive_data_detector import (
     SensitiveDataDetector,
     SensitiveEntity,
@@ -6,6 +10,8 @@ from src.privacy.sensitive_data_detector import (
 
 __all__ = [
     "PrivacyCapsule",
+    "PrivacyDecision",
+    "PrivacyPolicy",
     "SensitiveDataDetector",
     "SensitiveEntity",
 ]

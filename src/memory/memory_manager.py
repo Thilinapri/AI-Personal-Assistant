@@ -21,13 +21,31 @@ class MemoryManager:
         self.candidate_threshold = candidate_threshold
 
     def store_memories(self, memories):
-        """Store and manage multiple extracted memories."""
+        """Store multiple memories without one failure stopping the batch."""
 
         if not memories:
-            return
+            return []
+
+        stored_ids = []
 
         for memory in memories:
-            self.store_memory(memory)
+
+            try:
+                memory_id = self.store_memory(memory)
+                stored_ids.append(memory_id)
+
+            except Exception as error:
+                title = memory.get(
+                    "title",
+                    "Unknown memory",
+                )
+
+                print(
+                    f"Memory processing failed "
+                    f"for '{title}': {error}"
+                )
+
+        return stored_ids
 
     def store_memory(self, memory):
         """Store one memory after checking for duplicates or updates."""
@@ -113,6 +131,47 @@ class MemoryManager:
             )
 
         return memory_id
+
+    def update_memory(self, memory_id, memory):
+        """Update a user-edited memory and refresh related data."""
+
+        existing = self.database.get_memory(
+            memory_id
+        )
+
+        if existing is None:
+            return False
+
+        if existing[9] != "active":
+            return False
+
+        updated = self.database.update_memory(
+            memory_id,
+            memory,
+        )
+
+        if not updated:
+            return False
+
+        # Regenerate semantic-search embedding.
+        self._store_embedding(
+            memory_id,
+            memory,
+        )
+
+        # Replace any old pending reminder.
+        if self.reminder_manager is not None:
+
+            self.reminder_manager.cancel_for_memory(
+                memory_id
+            )
+
+            self.reminder_manager.create_for_memory(
+                memory_id,
+                memory,
+            )
+
+        return True
 
     def backfill_missing_embeddings(self):
         """Generate embeddings for active memories that do not have one yet."""

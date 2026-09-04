@@ -86,6 +86,80 @@ class MemoryRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0][1], "active")
         self.assertEqual(rows[0][2], 2)
 
+    def test_user_edit_updates_memory_embedding_and_reminder(self):
+
+        original = {
+            "category": "Event",
+            "title": "Project meeting",
+            "content": "Project meeting is at 2 PM.",
+            "date": "2099-01-01",
+            "time": "14:00",
+            "notification": True,
+        }
+
+        memory_id = self.memory_manager.store_memory(
+            original
+        )
+
+        edited = {
+            "category": "Event",
+            "title": "Project meeting",
+            "content": "Project meeting is at 5 PM.",
+            "date": "2099-01-01",
+            "time": "17:00",
+            "notification": True,
+        }
+
+        updated = self.memory_manager.update_memory(
+            memory_id,
+            edited,
+        )
+
+        memory = self.database.get_memory(
+            memory_id
+        )
+
+        reminders = self.database.connection.execute(
+            """
+            SELECT reminder_time, status
+            FROM reminders
+            WHERE memory_id = ?
+            ORDER BY id
+            """,
+            (memory_id,),
+        ).fetchall()
+
+        self.assertTrue(updated)
+
+        self.assertEqual(
+            memory[3],
+            "Project meeting is at 5 PM."
+        )
+
+        self.assertEqual(
+            memory[5],
+            "17:00"
+        )
+
+        self.assertIsNotNone(
+            memory[14]
+        )
+
+        self.assertEqual(
+            reminders[0][1],
+            "cancelled"
+        )
+
+        self.assertEqual(
+            reminders[1][0],
+            "2099-01-01 16:30:00"
+        )
+
+        self.assertEqual(
+            reminders[1][1],
+            "pending"
+        )
+
     def test_update_memory_and_reminder(self):
         old_memory = {
             "category": "Event",
@@ -156,6 +230,72 @@ class MemoryRegressionTests(unittest.TestCase):
         active = self.database.get_active_memories()
 
         self.assertEqual(len(active), 2)
+
+    def test_memory_batch_continues_after_failure(self):
+
+        memories = [
+            {
+                "category": "Task",
+                "title": "First memory",
+                "content": "First valid memory.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+            {
+                "category": "Task",
+                "title": "Broken memory",
+                "content": "This memory will fail.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+            {
+                "category": "Task",
+                "title": "Third memory",
+                "content": "Third valid memory.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+        ]
+
+        original_store_memory = self.memory_manager.store_memory
+
+        def controlled_store(memory):
+
+            if memory["title"] == "Broken memory":
+                raise RuntimeError(
+                    "simulated memory failure"
+                )
+
+            return original_store_memory(memory)
+
+        self.memory_manager.store_memory = controlled_store
+
+        stored_ids = self.memory_manager.store_memories(
+            memories
+        )
+
+        active_memories = self.database.get_active_memories()
+
+        titles = [
+            memory[2]
+            for memory in active_memories
+        ]
+
+        self.assertCountEqual(
+            titles,
+            [
+                "First memory",
+                "Third memory",
+            ],
+        )
+
+        self.assertEqual(
+            len(stored_ids),
+            2,
+        )
 
     def test_semantic_retrieval(self):
         memories = [

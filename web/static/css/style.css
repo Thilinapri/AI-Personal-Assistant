@@ -1,0 +1,123 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #f4f6f8;
+    color: #1f2937;
+}
+
+.dashboard {
+    max-width: 1000px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+section {
+    background: white;
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.search-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.search-box input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.search-box button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.memory-card {
+    border: 1px solid #e5e7eb;
+    padding: 16px;
+    margin-top: 12px;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.memory-card h3 {
+    margin-top: 0;
+}
+
+.memory-card p {
+    margin: 6px 0;
+}
+
+.delete-memory-button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.memory-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.edit-memory-button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.memory-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.memory-edit-form input,
+.memory-edit-form textarea {
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font: inherit;
+}
+
+.memory-edit-form textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.memory-edit-form button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+#listening-toggle-button {
+    margin-top: 10px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+#listening-toggle-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#clear-memories-button {
+    margin-bottom: 12px;
+    padding: 9px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}

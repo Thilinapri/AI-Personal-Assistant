@@ -15,9 +15,10 @@ class ContinuousTranscriber:
 
     CHUNK_SECONDS = 20
 
-    def __init__(self, microphone, audio_queue):
+    def __init__(self, microphone, audio_queue, database):
         self.microphone = microphone
         self.audio_queue = audio_queue
+        self.database = database
 
         self.blocks_per_chunk = int(
             self.CHUNK_SECONDS * SAMPLE_RATE / BLOCK_SIZE
@@ -33,7 +34,10 @@ class ContinuousTranscriber:
     def start(self):
         """Start continuous microphone capture."""
 
-        if self._thread is not None and self._thread.is_alive():
+        if (
+            self._thread is not None
+            and self._thread.is_alive()
+        ):
             return
 
         self._stop_event.clear()
@@ -47,7 +51,7 @@ class ContinuousTranscriber:
         self._thread.start()
 
     def stop(self):
-        """Request the capture thread to stop."""
+        """Request the capture loop to stop."""
 
         self._stop_event.set()
 
@@ -58,7 +62,9 @@ class ContinuousTranscriber:
             self._thread.join(timeout=timeout)
 
     def _run(self):
-        print("\n🎧 Continuous listening started...\n")
+        print(
+            "\n🎧 Continuous listening started...\n"
+        )
 
         audio_buffer = np.empty(
             self.chunk_samples,
@@ -66,14 +72,63 @@ class ContinuousTranscriber:
         )
 
         position = 0
+        is_paused = False
 
         try:
             while not self._stop_event.is_set():
+
+                listening_enabled = (
+                    self.database.get_listening_enabled()
+                )
+
+                # ---------------------------------
+                # Pause Listening
+                # ---------------------------------
+
+                if not listening_enabled:
+
+                    if not is_paused:
+                        # Discard any partially captured audio.
+                        position = 0
+
+                        self.microphone.stop()
+
+                        is_paused = True
+
+                        print(
+                            "⏸️ Listening paused. "
+                            "Microphone capture stopped."
+                        )
+
+                    self._stop_event.wait(0.5)
+                    continue
+
+                # ---------------------------------
+                # Resume Listening
+                # ---------------------------------
+
+                if is_paused:
+
+                    self.microphone.start()
+
+                    is_paused = False
+
+                    print(
+                        "▶️ Listening resumed. "
+                        "Microphone capture started."
+                    )
+
+                # ---------------------------------
+                # Capture Audio
+                # ---------------------------------
+
                 audio = self.microphone.read()
 
                 samples = audio.shape[0]
 
-                audio_buffer[position:position + samples] = audio[:, 0]
+                audio_buffer[
+                    position:position + samples
+                ] = audio[:, 0]
 
                 position += samples
 
@@ -92,8 +147,11 @@ class ContinuousTranscriber:
 
         except Exception as error:
             print(
-                f"Continuous transcription capture error: {error}"
+                "Continuous transcription "
+                f"capture error: {error}"
             )
 
         finally:
-            print("🎧 Continuous listening stopped.")
+            print(
+                "🎧 Continuous listening stopped."
+            )

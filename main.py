@@ -6,8 +6,10 @@ from src.audio.microphone import Microphone
 from src.speech.whisper_model import WhisperService
 from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
+from src.ai.disabled_memory_engine import DisabledMemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
+from src.config import ENABLE_GEMINI
 
 from src.memory.memory_manager import MemoryManager
 from src.memory.embedding_service import EmbeddingService
@@ -20,6 +22,9 @@ from src.worker.audio_worker import AudioWorker
 from src.worker.continuous_transcriber import ContinuousTranscriber
 from src.worker.session_processor import SessionProcessor
 from src.worker.reminder_worker import ReminderWorker
+
+from web.app import create_app
+from web.server import WebServer
 
 
 def configure_console_output():
@@ -35,7 +40,9 @@ def shutdown_components(
     continuous_transcriber,
     session_processor,
     reminder_worker,
+    web_server,
     audio_queue,
+    worker,
     worker_thread,
     database,
 ):
@@ -50,7 +57,18 @@ def shutdown_components(
     # Stop periodic session processing.
     session_processor.stop()
 
-    # Tell AudioWorker that no more audio will arrive.
+    # Prevent AudioWorker from processing any more queued audio.
+    worker.stop()
+
+    # Remove any audio chunks that are still waiting.
+    while True:
+        try:
+            audio_queue.get_nowait()
+            audio_queue.task_done()
+        except queue.Empty:
+            break
+
+    # Wake AudioWorker and tell it to exit.
     audio_queue.put(None)
 
     # Wait for workers to finish.
@@ -60,6 +78,10 @@ def shutdown_components(
     # Stop reminder checking before closing the database.
     reminder_worker.stop()
     reminder_worker.join()
+
+    # Stop the dashboard before closing the shared database.
+    web_server.stop()
+    web_server.join()
 
     # Close shared resources last.
     database.close()
@@ -116,6 +138,24 @@ def main():
     )
 
     # ---------------------------------
+    # Prepare Existing Memories
+    # ---------------------------------
+
+    try:
+        backfilled_count = memory_manager.backfill_missing_embeddings()
+
+        if backfilled_count > 0:
+            print(
+                f"🧠 Prepared {backfilled_count} existing "
+                "memories for semantic search."
+            )
+
+    except Exception as error:
+        print(
+            f"Memory embedding backfill failed: {error}"
+        )
+
+    # ---------------------------------
     # Reminder Worker
     # ---------------------------------
 
@@ -143,7 +183,12 @@ def main():
 
     transcript_buffer = TranscriptBuffer()
 
-    memory_engine = MemoryEngine()
+    if ENABLE_GEMINI:
+        memory_engine = MemoryEngine()
+        print("🤖 Gemini memory processing enabled.")
+    else:
+        memory_engine = DisabledMemoryEngine()
+        print("🤖 Gemini memory processing disabled.")
 
     # ---------------------------------
     # Audio Queue
@@ -179,6 +224,7 @@ def main():
     continuous_transcriber = ContinuousTranscriber(
         microphone=microphone,
         audio_queue=audio_queue,
+        database=database,
     )
 
     continuous_transcriber.start()
@@ -194,6 +240,26 @@ def main():
     )
 
     session_processor.start()
+
+    # ---------------------------------
+    # Web Dashboard
+    # ---------------------------------
+
+    web_app = create_app(
+        database=database,
+        embedding_service=embedding_service,
+        retrieval_service=retrieval_service,
+        reminder_manager=reminder_manager,
+        memory_manager=memory_manager,
+    )
+
+    web_server = WebServer(
+        app=web_app,
+        host="127.0.0.1",
+        port=5000,
+    )
+
+    web_server.start()
 
     print()
     print("✅ Assistant Ready")
@@ -219,7 +285,9 @@ def main():
             continuous_transcriber=continuous_transcriber,
             session_processor=session_processor,
             reminder_worker=reminder_worker,
+            web_server=web_server,
             audio_queue=audio_queue,
+            worker=worker,
             worker_thread=worker_thread,
             database=database,
         )

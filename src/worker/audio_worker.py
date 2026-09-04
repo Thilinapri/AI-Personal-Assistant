@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 
 
@@ -19,6 +20,11 @@ class AudioWorker:
         self.keyword_filter = keyword_filter
         self.memory_engine = memory_engine
         self.memory_manager = memory_manager
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        """Prevent any further queued audio from being processed."""
+        self._stop_event.set()
 
     def run(self):
         """Consume audio until the queue sentinel is received."""
@@ -30,6 +36,9 @@ class AudioWorker:
                 if audio is None:
                     print("Audio worker stopped.")
                     return
+
+                if self._stop_event.is_set():
+                    continue
 
                 self.process_audio(audio)
 
@@ -52,6 +61,12 @@ class AudioWorker:
             print(
                 f"\n📝 Whisper transcription: {transcription!r}"
             )
+
+            if self._stop_event.is_set():
+                print(
+                    "🛑 Audio processing cancelled during shutdown."
+                )
+                return
 
         except Exception as error:
             print(
@@ -124,6 +139,12 @@ class AudioWorker:
             print(
                 "🤖 Sending immediate context to Gemini..."
             )
+
+            if self._stop_event.is_set():
+                print(
+                    "🛑 Memory processing cancelled during shutdown."
+                )
+                return
 
             result = self.memory_engine.process(
                 mode="immediate",

@@ -75,6 +75,23 @@ class Database:
         )
         """)
 
+        # ---------------------------------
+        # System Settings Table
+        # ---------------------------------
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """)
+
+        self.cursor.execute("""
+        INSERT OR IGNORE INTO system_settings
+        (key, value)
+        VALUES ('listening_enabled', '1')
+        """)
+
         self.connection.commit()
 
     def migrate_memories_table(self):
@@ -299,6 +316,55 @@ class Database:
 
             return cursor.fetchone()
 
+    def delete_memory(self, memory_id):
+        """Permanently delete a memory and its linked reminders."""
+
+        with self.lock:
+            with self.connection:
+                self.connection.execute(
+                    "DELETE FROM memories WHERE id = ?",
+                    (memory_id,)
+                )
+
+    def update_memory(self, memory_id, memory):
+        """Update one existing active memory."""
+
+        with self.lock:
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    UPDATE memories
+                    SET
+                        category = ?,
+                        title = ?,
+                        content = ?,
+                        date = ?,
+                        time = ?,
+                        notification = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND status = 'active'
+                """, (
+                    memory["category"],
+                    memory["title"],
+                    memory["content"],
+                    memory["date"],
+                    memory["time"],
+                    int(memory["notification"]),
+                    memory_id,
+                ))
+
+                return cursor.rowcount > 0
+
+    def delete_all_memories(self):
+        """Permanently delete all memories and linked reminders."""
+
+        with self.lock:
+            with self.connection:
+                self.connection.execute(
+                    "DELETE FROM memories"
+                )
+
     def get_active_memories(self):
         """Return all memories that are currently active."""
 
@@ -469,6 +535,29 @@ class Database:
                     reminder_id,
                 ))
 
+    def get_all_reminders(self):
+        """Return all reminders with their related memory details."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    reminders.id,
+                    reminders.memory_id,
+                    reminders.reminder_time,
+                    reminders.status,
+                    reminders.created_at,
+                    reminders.triggered_at,
+                    memories.title,
+                    memories.content
+                FROM reminders
+                JOIN memories
+                    ON reminders.memory_id = memories.id
+                ORDER BY reminders.reminder_time ASC
+            """)
+
+            return cursor.fetchall()
+
     def get_all_memories(self):
         """Return all memories for compatibility with existing code."""
 
@@ -489,6 +578,42 @@ class Database:
             """)
 
             return self.cursor.fetchall()
+
+    def get_listening_enabled(self):
+        """Return whether EchoMind is allowed to capture audio."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT value
+                FROM system_settings
+                WHERE key = 'listening_enabled'
+            """)
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return True
+
+            return row[0] == "1"
+
+    def set_listening_enabled(self, enabled):
+        """Enable or pause conversational audio capture."""
+
+        value = "1" if enabled else "0"
+
+        with self.lock:
+
+            with self.connection:
+
+                self.connection.execute("""
+                    INSERT INTO system_settings
+                    (key, value)
+                    VALUES ('listening_enabled', ?)
+
+                    ON CONFLICT(key)
+                    DO UPDATE SET value = excluded.value
+                """, (value,))
 
     def close(self):
 

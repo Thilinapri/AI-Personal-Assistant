@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>EchoMind Dashboard</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+    <main class="dashboard">
+
+        <h1>EchoMind</h1>
+        <p>Personal Memory Assistant Dashboard</p>
+
+        <section>
+            <h2>System Status</h2>
+
+            <p id="system-status">
+                Loading...
+            </p>
+
+            <button id="listening-toggle-button">
+                Loading...
+            </button>
+        </section>
+
+        <section>
+            <h2>Memories</h2>
+
+            <button id="clear-memories-button">
+                Clear All Memories
+            </button>
+
+            <div id="memory-list">
+                Loading memories...
+            </div>
+        </section>
+
+        <section>
+            <h2>Memory Search</h2>
+
+            <div class="search-box">
+
+                <input
+                    id="memory-search-input"
+                    type="text"
+                    placeholder="Ask about your memories..."
+                >
+
+                <button id="memory-search-button">
+                    Search
+                </button>
+
+            </div>
+
+            <div id="search-results"></div>
+        </section>
+
+        <section>
+            <h2>Reminders</h2>
+
+            <div id="reminder-list">
+                Loading reminders...
+            </div>
+        </section>
+
+    </main>
+
+    <script
+        src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
+
+</body>
+</html>

@@ -1,3 +1,6 @@
+let knownTriggeredReminderIds = new Set();
+let reminderStateInitialized = false;
+
 function createDetailRow(label, value) {
     const paragraph =
         document.createElement("p");
@@ -292,6 +295,46 @@ async function loadReminders() {
     try {
         const response = await fetch("/api/reminders");
         const reminders = await response.json();
+
+        const triggeredReminders = reminders.filter(
+            (reminder) =>
+                reminder.status === "triggered"
+        );
+
+        if (!reminderStateInitialized) {
+
+            triggeredReminders.forEach(
+                (reminder) => {
+                    knownTriggeredReminderIds.add(
+                        reminder.id
+                    );
+                }
+            );
+
+            reminderStateInitialized = true;
+
+        } else {
+
+            triggeredReminders.forEach(
+                (reminder) => {
+
+                    if (
+                        !knownTriggeredReminderIds.has(
+                            reminder.id
+                        )
+                    ) {
+
+                        alert(
+                            `REMINDER\n\n${reminder.title}\n\n${reminder.content}`
+                        );
+
+                        knownTriggeredReminderIds.add(
+                            reminder.id
+                        );
+                    }
+                }
+            );
+        }
 
         const reminderList =
             document.getElementById("reminder-list");
@@ -746,3 +789,7 @@ document
 loadStatus();
 loadMemories();
 loadReminders();
+
+// Keep dashboard status and reminders up to date.
+setInterval(loadStatus, 5000);
+setInterval(loadReminders, 5000);

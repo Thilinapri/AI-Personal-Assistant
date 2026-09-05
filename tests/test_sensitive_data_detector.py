@@ -306,6 +306,171 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             [],
         )
 
+    def test_detects_passport_number_as_amber(self):
+
+        text = "My passport number is N1234567"
+
+        entities = self.detector.detect(text)
+
+        passport_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "PASSPORT"
+        ]
+
+        self.assertEqual(
+            len(passport_entities),
+            1,
+        )
+
+        self.assertEqual(
+            passport_entities[0].risk,
+            "amber",
+        )
+
+    def test_booking_reference_is_not_treated_as_passport(self):
+
+        text = "Booking reference is N1234567"
+
+        entities = self.detector.detect(text)
+
+        passport_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "PASSPORT"
+        ]
+
+        self.assertEqual(
+            passport_entities,
+            [],
+        )
+
+    def test_detects_numeric_date_of_birth_as_amber(self):
+
+        text = "My date of birth is 15/08/2002"
+
+        entities = self.detector.detect(text)
+
+        dob_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "DATE_OF_BIRTH"
+        ]
+
+        self.assertEqual(
+            len(dob_entities),
+            1,
+        )
+
+        self.assertEqual(
+            dob_entities[0].risk,
+            "amber",
+        )
+
+    def test_detects_spoken_date_of_birth_as_amber(self):
+
+        text = "I was born on 15 August 2002"
+
+        entities = self.detector.detect(text)
+
+        dob_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "DATE_OF_BIRTH"
+        ]
+
+        self.assertEqual(
+            len(dob_entities),
+            1,
+        )
+
+        self.assertEqual(
+            dob_entities[0].risk,
+            "amber",
+        )
+
+    def test_normal_event_date_is_not_treated_as_date_of_birth(self):
+
+        text = "My presentation is on 15 August 2026"
+
+        entities = self.detector.detect(text)
+
+        dob_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "DATE_OF_BIRTH"
+        ]
+
+        self.assertEqual(
+            dob_entities,
+            [],
+        )
+
+    def test_detects_precise_gps_coordinates_as_amber(self):
+
+        text = (
+            "My GPS coordinates are "
+            "6.9271, 79.8612"
+        )
+
+        entities = self.detector.detect(text)
+
+        location_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "PRECISE_LOCATION"
+        ]
+
+        self.assertEqual(
+            len(location_entities),
+            1,
+        )
+
+        self.assertEqual(
+            location_entities[0].risk,
+            "amber",
+        )
+
+    def test_coordinates_without_location_context_are_not_flagged(self):
+
+        text = "The values are 6.9271, 79.8612"
+
+        entities = self.detector.detect(text)
+
+        location_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "PRECISE_LOCATION"
+        ]
+
+        self.assertEqual(
+            location_entities,
+            [],
+        )
+
+    def test_invalid_gps_coordinates_are_not_flagged(self):
+
+        text = (
+            "GPS coordinates are "
+            "95.0000, 200.0000"
+        )
+
+        entities = self.detector.detect(text)
+
+        location_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "PRECISE_LOCATION"
+        ]
+
+        self.assertEqual(
+            location_entities,
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

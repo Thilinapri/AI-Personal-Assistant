@@ -36,6 +36,23 @@ class SensitiveDataDetector:
         r")(?!\d)"
     )
 
+    PRECISE_LOCATION_PATTERN = re.compile(
+        r"\b(?:"
+        r"gps(?:\s+coordinates)?"
+        r"|coordinates"
+        r"|location\s+coordinates"
+        r")\b"
+        r"\s*(?:are|is|=|:)?\s*"
+        r"("
+        r"\(?\s*"
+        r"-?\d{1,2}\.\d{3,}"
+        r"\s*,\s*"
+        r"-?\d{1,3}\.\d{3,}"
+        r"\s*\)?"
+        r")",
+        re.IGNORECASE,
+    )
+
     RED_PATTERNS = (
         (
             "PASSWORD",
@@ -127,6 +144,52 @@ class SensitiveDataDetector:
             ),
         ),
         (
+            "PASSPORT",
+            re.compile(
+                r"\bpassport"
+                r"(?:\s+(?:number|no))?"
+                r"\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"([A-Z0-9]{6,12})\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "DATE_OF_BIRTH",
+            re.compile(
+                r"\b(?:dob|date\s+of\s+birth)\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"("
+                r"(?:0?[1-9]|[12]\d|3[01])"
+                r"[./\-]"
+                r"(?:0?[1-9]|1[0-2])"
+                r"[./\-]"
+                r"(?:19|20)\d{2}"
+                r")\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "DATE_OF_BIRTH",
+            re.compile(
+                r"\b(?:dob|date\s+of\s+birth|born\s+on)\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"("
+                r"(?:0?[1-9]|[12]\d|3[01])"
+                r"\s+"
+                r"(?:"
+                r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|"
+                r"apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
+                r"aug(?:ust)?|sep(?:tember)?|sept(?:ember)?|"
+                r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+                r")"
+                r"\s+"
+                r"(?:19|20)\d{2}"
+                r")\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
             "ADDRESS",
             re.compile(
                 r"\b(?:home|work|office|residential|postal|mailing)"
@@ -188,6 +251,11 @@ class SensitiveDataDetector:
         )
 
         self._detect_card_numbers(
+            text=text,
+            entities=entities,
+        )
+
+        self._detect_precise_locations(
             text=text,
             entities=entities,
         )
@@ -308,6 +376,50 @@ class SensitiveDataDetector:
             total += value
 
         return total % 10 == 0
+
+    def _detect_precise_locations(
+        self,
+        text,
+        entities,
+    ):
+        """
+        Detect precise latitude/longitude pairs only when
+        explicit GPS/location context is present.
+        """
+
+        for match in self.PRECISE_LOCATION_PATTERN.finditer(
+            text
+        ):
+
+            candidate = match.group(1)
+
+            numbers = re.findall(
+                r"-?\d+(?:\.\d+)?",
+                candidate,
+            )
+
+            if len(numbers) != 2:
+                continue
+
+            latitude = float(numbers[0])
+            longitude = float(numbers[1])
+
+            if not -90 <= latitude <= 90:
+                continue
+
+            if not -180 <= longitude <= 180:
+                continue
+
+            start, end = match.span(1)
+
+            entities.append(
+                SensitiveEntity(
+                    entity_type="PRECISE_LOCATION",
+                    start=start,
+                    end=end,
+                    risk="amber",
+                )
+            )
 
     @staticmethod
     def _remove_duplicates(

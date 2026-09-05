@@ -7,6 +7,10 @@ from src.privacy.minimum_disclosure import (
     DisclosureResult,
     MinimumDisclosureGate,
 )
+from src.privacy.privacy_gateway import (
+    PrivacyGateway,
+    PrivacyGatewayResult,
+)
 from src.privacy.privacy_capsule import PrivacyCapsule
 from src.privacy.privacy_policy import (
     PrivacyDecision,
@@ -28,6 +32,8 @@ __all__ = [
     "MinimumDisclosureGate",
     "PrivacyCapsule",
     "PrivacyDecision",
+    "PrivacyGateway",
+    "PrivacyGatewayResult",
     "PrivacyPolicy",
     "PseudonymizationResult",
     "Pseudonymizer",

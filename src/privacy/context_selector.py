@@ -2,19 +2,44 @@ from dataclasses import dataclass
 import re
 
 
+@dataclass(frozen=True)
+class ScoredSentence:
+    """
+    A locally selected sentence together with its usefulness score.
+
+    score is between 0.0 and 1.0.
+    """
+
+    text: str
+    score: float
+    original_index: int
+    selection_source: str
+
+
 @dataclass
 class ContextSelectionResult:
     """
     Result of locally selecting memory-relevant conversation text.
     """
 
-    selected_sentences: list[str]
+    selected_items: list[ScoredSentence]
     original_sentence_count: int
     semantic_scored_count: int
 
     @property
+    def selected_sentences(self):
+        """
+        Preserve the old interface used by existing code/tests.
+        """
+
+        return [
+            item.text
+            for item in self.selected_items
+        ]
+
+    @property
     def selected_sentence_count(self):
-        return len(self.selected_sentences)
+        return len(self.selected_items)
 
 
 class ContextSelector:
@@ -23,32 +48,34 @@ class ContextSelector:
 
     Selection happens in two stages:
 
-    1. Cheap rule-based checks.
+    1. Cheap rule-based scoring.
     2. MiniLM semantic scoring only for uncertain sentences.
 
-    The EmbeddingService is injected so EchoMind can reuse the
-    already-loaded local MiniLM model.
+    No additional model is introduced.
     """
 
-    # Experimental starting threshold.
-    # We will later evaluate this using project test data.
     DEFAULT_SEMANTIC_THRESHOLD = 0.45
 
-    STRONG_PHRASES = (
+    EXPLICIT_REMINDER_PHRASES = (
         "remind me",
         "remember to",
-        "remember that",
         "don't forget",
         "do not forget",
-        "i need to",
-        "i have to",
-        "i must",
+    )
+
+    HIGH_PRIORITY_PHRASES = (
         "deadline",
         "appointment",
         "meeting",
         "submit",
         "submission",
         "due date",
+        "i need to",
+        "i have to",
+        "i must",
+    )
+
+    ACTION_PHRASES = (
         "call me",
         "call ",
         "send ",
@@ -58,6 +85,10 @@ class ContextSelector:
         "pick up",
         "promise",
         "promised",
+    )
+
+    PREFERENCE_PHRASES = (
+        "remember that",
         "prefer",
         "preference",
         "favorite",
@@ -129,7 +160,7 @@ class ContextSelector:
                 "semantic_threshold must be between 0 and 1."
             )
 
-        # Cache prototype embeddings once.
+        # Computed once when the selector is created.
         self.prototype_embeddings = (
             self.embedding_service.encode_many(
                 self.MEMORY_PROTOTYPES
@@ -140,10 +171,6 @@ class ContextSelector:
         self,
         sentences,
     ) -> ContextSelectionResult:
-        """
-        Select memory-relevant sentences while preserving
-        their original order.
-        """
 
         if sentences is None:
             raise ValueError("Sentences cannot be None.")
@@ -164,24 +191,22 @@ class ContextSelector:
 
             sentence = sentence.strip()
 
-            if not sentence:
-                continue
-
-            cleaned.append(
-                (
-                    index,
-                    sentence,
+            if sentence:
+                cleaned.append(
+                    (
+                        index,
+                        sentence,
+                    )
                 )
-            )
 
         if not cleaned:
             return ContextSelectionResult(
-                selected_sentences=[],
+                selected_items=[],
                 original_sentence_count=0,
                 semantic_scored_count=0,
             )
 
-        selected_indexes = set()
+        selected = {}
         uncertain = []
 
         for index, sentence in cleaned:
@@ -189,8 +214,19 @@ class ContextSelector:
             if self._is_filler(sentence):
                 continue
 
-            if self._has_strong_signal(sentence):
-                selected_indexes.add(index)
+            rule_score = self._rule_score(
+                sentence
+            )
+
+            if rule_score is not None:
+
+                selected[index] = ScoredSentence(
+                    text=sentence,
+                    score=rule_score,
+                    original_index=index,
+                    selection_source="rule",
+                )
+
                 continue
 
             uncertain.append(
@@ -200,7 +236,8 @@ class ContextSelector:
                 )
             )
 
-        # Only uncertain sentences use MiniLM.
+        # MiniLM runs only for uncertain sentences,
+        # and all uncertain sentences are processed in one batch.
         if uncertain:
 
             uncertain_texts = [
@@ -227,39 +264,71 @@ class ContextSelector:
                 )
 
                 if score >= self.semantic_threshold:
-                    selected_indexes.add(index)
 
-        selected_sentences = [
-            sentence
-            for index, sentence in cleaned
-            if index in selected_indexes
+                    selected[index] = ScoredSentence(
+                        text=sentence,
+                        score=self._clamp_score(score),
+                        original_index=index,
+                        selection_source="semantic",
+                    )
+
+        # Keep original conversation order here.
+        # Ranking will be done later by MinimumDisclosureGate.
+        selected_items = [
+            selected[index]
+            for index, _ in cleaned
+            if index in selected
         ]
 
         return ContextSelectionResult(
-            selected_sentences=selected_sentences,
+            selected_items=selected_items,
             original_sentence_count=len(cleaned),
             semantic_scored_count=len(uncertain),
         )
 
-    def _has_strong_signal(
+    def _rule_score(
         self,
         sentence,
     ):
+        """
+        Cheap deterministic usefulness score.
+
+        Higher scores represent stronger memory/reminder intent.
+        """
+
         lowered = sentence.lower()
 
         if any(
             phrase in lowered
-            for phrase in self.STRONG_PHRASES
+            for phrase in self.EXPLICIT_REMINDER_PHRASES
         ):
-            return True
+            return 1.0
 
-        if self.TEMPORAL_PATTERN.search(sentence):
-            return True
+        if any(
+            phrase in lowered
+            for phrase in self.HIGH_PRIORITY_PHRASES
+        ):
+            return 0.90
 
-        if self.CLOCK_PATTERN.search(sentence):
-            return True
+        if any(
+            phrase in lowered
+            for phrase in self.ACTION_PHRASES
+        ):
+            return 0.85
 
-        return False
+        if any(
+            phrase in lowered
+            for phrase in self.PREFERENCE_PHRASES
+        ):
+            return 0.80
+
+        if (
+            self.TEMPORAL_PATTERN.search(sentence)
+            or self.CLOCK_PATTERN.search(sentence)
+        ):
+            return 0.75
+
+        return None
 
     def _is_filler(
         self,
@@ -289,12 +358,24 @@ class ContextSelector:
         )
 
     @staticmethod
+    def _clamp_score(
+        score,
+    ):
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(score),
+            ),
+        )
+
+    @staticmethod
     def _dot_product(
         first,
         second,
     ):
         """
-        Dot product equals cosine similarity here because
+        Dot product equals cosine similarity because the
         EmbeddingService returns normalized embeddings.
         """
 

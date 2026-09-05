@@ -1,6 +1,7 @@
 from src.privacy.context_selector import (
     ContextSelectionResult,
     ContextSelector,
+    ScoredSentence,
 )
 from src.privacy.privacy_capsule import PrivacyCapsule
 from src.privacy.privacy_policy import (
@@ -24,6 +25,7 @@ __all__ = [
     "PrivacyPolicy",
     "PseudonymizationResult",
     "Pseudonymizer",
+    "ScoredSentence",
     "SensitiveDataDetector",
     "SensitiveEntity",
 ]

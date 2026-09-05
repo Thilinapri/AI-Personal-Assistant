@@ -248,6 +248,95 @@ class ContextSelectorTests(unittest.TestCase):
                 semantic_threshold=1.5,
             )
 
+    def test_explicit_reminder_gets_highest_rule_score(self):
+
+        result = self.selector.select(
+            [
+                "Remind me Friday to submit the report.",
+            ]
+        )
+
+        item = result.selected_items[0]
+
+        self.assertEqual(
+            item.score,
+            1.0,
+        )
+
+        self.assertEqual(
+            item.selection_source,
+            "rule",
+        )
+
+    def test_deadline_outranks_date_only_sentence(self):
+
+        result = self.selector.select(
+            [
+                "The deadline is next week.",
+                "The presentation is tomorrow.",
+            ]
+        )
+
+        deadline = result.selected_items[0]
+        temporal = result.selected_items[1]
+
+        self.assertEqual(
+            deadline.score,
+            0.90,
+        )
+
+        self.assertEqual(
+            temporal.score,
+            0.75,
+        )
+
+        self.assertGreater(
+            deadline.score,
+            temporal.score,
+        )
+
+    def test_semantic_selection_keeps_similarity_score(self):
+
+        result = self.selector.select(
+            [
+                "The dentist moved the slot again.",
+            ]
+        )
+
+        item = result.selected_items[0]
+
+        self.assertAlmostEqual(
+            item.score,
+            0.80,
+        )
+
+        self.assertEqual(
+            item.selection_source,
+            "semantic",
+        )
+
+    def test_selected_item_keeps_original_index(self):
+
+        result = self.selector.select(
+            [
+                "Okay.",
+                "The wall is painted blue.",
+                "Remind me Friday to send the report.",
+            ]
+        )
+
+        item = result.selected_items[0]
+
+        self.assertEqual(
+            item.text,
+            "Remind me Friday to send the report.",
+        )
+
+        self.assertEqual(
+            item.original_index,
+            2,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

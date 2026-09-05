@@ -80,6 +80,35 @@ class PseudonymizerTests(unittest.TestCase):
             "200012345678",
         )
 
+    def test_pseudonymizes_address(self):
+
+        text = (
+            "My home address is "
+            "25 Example Road, Colombo."
+        )
+
+        entities = self.detector.detect(text)
+
+        result = self.pseudonymizer.pseudonymize(
+            text,
+            entities,
+        )
+
+        self.assertEqual(
+            result.text,
+            "My home address is <ADDRESS_1>.",
+        )
+
+        self.assertEqual(
+            result.mapping["<ADDRESS_1>"],
+            "25 Example Road, Colombo",
+        )
+
+        self.assertIn(
+            "ADDRESS",
+            result.redacted_types,
+        )
+
     def test_same_value_reuses_same_placeholder(self):
 
         text = (

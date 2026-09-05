@@ -30,6 +30,7 @@ class Pseudonymizer:
         "EMAIL": "EMAIL",
         "PHONE": "PHONE",
         "NIC": "ID",
+        "ADDRESS": "ADDRESS",
     }
 
     def pseudonymize(

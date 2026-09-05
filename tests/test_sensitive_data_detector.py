@@ -151,6 +151,161 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             [],
         )
 
+    def test_detects_valid_payment_card_as_red(self):
+
+        text = (
+            "My card number is "
+            "4111 1111 1111 1111"
+        )
+
+        entities = self.detector.detect(text)
+
+        card_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "PAYMENT_CARD"
+        ]
+
+        self.assertEqual(
+            len(card_entities),
+            1,
+        )
+
+        self.assertEqual(
+            card_entities[0].risk,
+            "red",
+        )
+
+    def test_invalid_card_candidate_is_not_flagged(self):
+
+        text = (
+            "Reference number "
+            "4111 1111 1111 1112"
+        )
+
+        entities = self.detector.detect(text)
+
+        card_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "PAYMENT_CARD"
+        ]
+
+        self.assertEqual(
+            card_entities,
+            [],
+        )
+
+    def test_detects_home_address_as_amber(self):
+
+        text = (
+            "My home address is "
+            "25 Example Road, Colombo."
+        )
+
+        entities = self.detector.detect(text)
+
+        address_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "ADDRESS"
+        ]
+
+        self.assertEqual(
+            len(address_entities),
+            1,
+        )
+
+        self.assertEqual(
+            address_entities[0].risk,
+            "amber",
+        )
+
+    def test_detects_live_at_address_as_amber(self):
+
+        text = (
+            "I live at "
+            "No. 12/3, Temple Road, Kandy."
+        )
+
+        entities = self.detector.detect(text)
+
+        address_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "ADDRESS"
+        ]
+
+        self.assertEqual(
+            len(address_entities),
+            1,
+        )
+
+        self.assertEqual(
+            address_entities[0].risk,
+            "amber",
+        )
+
+    def test_normal_place_name_is_not_treated_as_private_address(self):
+
+        text = "Meeting at SLIIT tomorrow."
+
+        entities = self.detector.detect(text)
+
+        address_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "ADDRESS"
+        ]
+
+        self.assertEqual(
+            address_entities,
+            [],
+        )
+
+    def test_detects_card_security_code_as_red(self):
+
+        text = "My CVV is 123"
+
+        entities = self.detector.detect(text)
+
+        security_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "CARD_SECURITY_CODE"
+        ]
+
+        self.assertEqual(
+            len(security_entities),
+            1,
+        )
+
+        self.assertEqual(
+            security_entities[0].risk,
+            "red",
+        )
+
+    def test_random_three_digit_number_is_not_card_security_code(self):
+
+        text = "Room number is 123"
+
+        entities = self.detector.detect(text)
+
+        security_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "CARD_SECURITY_CODE"
+        ]
+
+        self.assertEqual(
+            security_entities,
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,12 @@ class SensitiveDataDetector:
         pseudonymized before cloud processing.
     """
 
+    CARD_CANDIDATE_PATTERN = re.compile(
+        r"(?<!\d)("
+        r"\d(?:[ -]?\d){12,18}"
+        r")(?!\d)"
+    )
+
     RED_PATTERNS = (
         (
             "PASSWORD",
@@ -46,6 +52,15 @@ class SensitiveDataDetector:
                 r"\bpin(?:\s+(?:code|number))?\b"
                 r"\s*(?:is|=|:)\s*"
                 r"[\"']?(\d{4,8})\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "CARD_SECURITY_CODE",
+            re.compile(
+                r"\b(?:cvv|cvc|card\s+security\s+code|security\s+code)\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"(\d{3,4})\b",
                 re.IGNORECASE,
             ),
         ),
@@ -111,6 +126,45 @@ class SensitiveDataDetector:
                 re.IGNORECASE,
             ),
         ),
+        (
+            "ADDRESS",
+            re.compile(
+                r"\b(?:home|work|office|residential|postal|mailing)"
+                r"\s+address\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"("
+                r"(?:no\.?\s*)?"
+                r"\d{1,5}[A-Za-z]?"
+                r"(?:[/\-]\d{1,5}[A-Za-z]?)?"
+                r"[\s,]+"
+                r"[A-Za-z0-9][A-Za-z0-9 .,'\-]{2,80}?"
+                r"\b(?:road|rd|street|st|avenue|ave|lane|ln|"
+                r"mawatha|place|drive|dr|garden|gardens|terrace)"
+                r"(?:[\s,]+[A-Za-z][A-Za-z '\-]{1,40})?"
+                r")"
+                r"(?=[.!?;]|$)",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "ADDRESS",
+            re.compile(
+                r"\b(?:i\s+live|i\s+stay|we\s+live|we\s+stay)"
+                r"\s+at\s+"
+                r"("
+                r"(?:no\.?\s*)?"
+                r"\d{1,5}[A-Za-z]?"
+                r"(?:[/\-]\d{1,5}[A-Za-z]?)?"
+                r"[\s,]+"
+                r"[A-Za-z0-9][A-Za-z0-9 .,'\-]{2,80}?"
+                r"\b(?:road|rd|street|st|avenue|ave|lane|ln|"
+                r"mawatha|place|drive|dr|garden|gardens|terrace)"
+                r"(?:[\s,]+[A-Za-z][A-Za-z '\-]{1,40})?"
+                r")"
+                r"(?=[.!?;]|$)",
+                re.IGNORECASE,
+            ),
+        ),
     )
 
     def detect(self, text: str) -> list[SensitiveEntity]:
@@ -130,6 +184,11 @@ class SensitiveDataDetector:
             text=text,
             patterns=self.RED_PATTERNS,
             risk="red",
+            entities=entities,
+        )
+
+        self._detect_card_numbers(
+            text=text,
             entities=entities,
         )
 
@@ -181,6 +240,74 @@ class SensitiveDataDetector:
                         risk=risk,
                     )
                 )
+
+    def _detect_card_numbers(
+        self,
+        text,
+        entities,
+    ):
+        """
+        Detect payment-card candidates only when they
+        pass the Luhn checksum.
+        """
+
+        for match in self.CARD_CANDIDATE_PATTERN.finditer(
+            text
+        ):
+
+            candidate = match.group(1)
+
+            digits = re.sub(
+                r"\D",
+                "",
+                candidate,
+            )
+
+            if not 13 <= len(digits) <= 19:
+                continue
+
+            if not self._passes_luhn(digits):
+                continue
+
+            start, end = match.span(1)
+
+            entities.append(
+                SensitiveEntity(
+                    entity_type="PAYMENT_CARD",
+                    start=start,
+                    end=end,
+                    risk="red",
+                )
+            )
+
+    @staticmethod
+    def _passes_luhn(
+        digits,
+    ):
+        """
+        Validate a numeric string using the Luhn checksum.
+        """
+
+        if not digits.isdigit():
+            return False
+
+        total = 0
+        reverse_digits = digits[::-1]
+
+        for index, digit in enumerate(
+            reverse_digits
+        ):
+            value = int(digit)
+
+            if index % 2 == 1:
+                value *= 2
+
+                if value > 9:
+                    value -= 9
+
+            total += value
+
+        return total % 10 == 0
 
     @staticmethod
     def _remove_duplicates(

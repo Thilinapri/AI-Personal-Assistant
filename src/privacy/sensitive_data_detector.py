@@ -85,8 +85,9 @@ class SensitiveDataDetector:
             "API_KEY",
             re.compile(
                 r"\b(?:api[_ -]?key|access[_ -]?token|auth[_ -]?token)\b"
-                r"\s*(?:is|=|:)\s*"
-                r"[\"']?([A-Za-z0-9._~+\-/=]{8,})",
+                r"\s*(?:is|=|:)?\s*"
+                r"[\"']?([A-Za-z0-9._~+\-/=]{8,}?)"
+                r"(?=[\s.,!?;]|$)",
                 re.IGNORECASE,
             ),
         ),

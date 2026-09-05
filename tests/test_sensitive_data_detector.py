@@ -471,6 +471,31 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             [],
         )
 
+    def test_detects_api_key_without_separator_in_natural_speech(self):
+
+        text = (
+            "Remind me Friday to rotate "
+            "API key ABCDEFGHIJK"
+        )
+
+        entities = self.detector.detect(text)
+
+        api_key_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "API_KEY"
+        ]
+
+        self.assertEqual(
+            len(api_key_entities),
+            1,
+        )
+
+        self.assertEqual(
+            api_key_entities[0].risk,
+            "red",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,10 +19,15 @@ class SensitiveEntity:
 
 class SensitiveDataDetector:
     """
-    Lightweight local detector for high-risk sensitive data.
+    Lightweight local detector for sensitive data.
 
-    This first version focuses only on RED-category secrets
-    that should never be sent to Gemini in raw form.
+    RED:
+        High-risk secrets that must never be sent to Gemini
+        in raw form.
+
+    AMBER:
+        Personal information that should be sanitized or
+        pseudonymized before cloud processing.
     """
 
     RED_PATTERNS = (
@@ -63,12 +68,57 @@ class SensitiveDataDetector:
         ),
     )
 
+    AMBER_PATTERNS = (
+        (
+            "EMAIL",
+            re.compile(
+                r"\b("
+                r"[A-Z0-9._%+-]+"
+                r"@"
+                r"[A-Z0-9.-]+"
+                r"\.[A-Z]{2,}"
+                r")\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "PHONE",
+            re.compile(
+                r"(?<!\d)("
+                r"(?:\+94|0094|94)[\s-]?7\d"
+                r"[\s-]?\d{3}[\s-]?\d{4}"
+                r"|"
+                r"07\d[\s-]?\d{3}[\s-]?\d{4}"
+                r")(?!\d)"
+            ),
+        ),
+        (
+            "NIC",
+            re.compile(
+                r"\b(?:"
+                r"nic"
+                r"|national\s+(?:identity|id)"
+                r"(?:\s+(?:number|no))?"
+                r"|identity\s+card"
+                r"(?:\s+(?:number|no))?"
+                r")\b"
+                r"\s*(?:is|=|:)?\s*"
+                r"("
+                r"\d{9}[VvXx]"
+                r"|"
+                r"\d{12}"
+                r")\b",
+                re.IGNORECASE,
+            ),
+        ),
+    )
+
     def detect(self, text: str) -> list[SensitiveEntity]:
         """
-        Detect RED-category secrets in text.
+        Detect RED and AMBER sensitive entities.
 
-        Sensitive values themselves are not copied into
-        the returned metadata objects.
+        The sensitive values themselves are not copied into
+        returned metadata objects.
         """
 
         if not text or not text.strip():
@@ -76,20 +126,19 @@ class SensitiveDataDetector:
 
         entities = []
 
-        for entity_type, pattern in self.RED_PATTERNS:
+        self._detect_patterns(
+            text=text,
+            patterns=self.RED_PATTERNS,
+            risk="red",
+            entities=entities,
+        )
 
-            for match in pattern.finditer(text):
-
-                start, end = match.span(1)
-
-                entities.append(
-                    SensitiveEntity(
-                        entity_type=entity_type,
-                        start=start,
-                        end=end,
-                        risk="red",
-                    )
-                )
+        self._detect_patterns(
+            text=text,
+            patterns=self.AMBER_PATTERNS,
+            risk="amber",
+            entities=entities,
+        )
 
         entities.sort(
             key=lambda entity: (
@@ -104,7 +153,34 @@ class SensitiveDataDetector:
     def has_red_secret(self, text: str) -> bool:
         """Return True if at least one RED secret is detected."""
 
-        return bool(self.detect(text))
+        return any(
+            entity.risk == "red"
+            for entity in self.detect(text)
+        )
+
+    @staticmethod
+    def _detect_patterns(
+        text,
+        patterns,
+        risk,
+        entities,
+    ):
+        """Apply one group of patterns to text."""
+
+        for entity_type, pattern in patterns:
+
+            for match in pattern.finditer(text):
+
+                start, end = match.span(1)
+
+                entities.append(
+                    SensitiveEntity(
+                        entity_type=entity_type,
+                        start=start,
+                        end=end,
+                        risk=risk,
+                    )
+                )
 
     @staticmethod
     def _remove_duplicates(

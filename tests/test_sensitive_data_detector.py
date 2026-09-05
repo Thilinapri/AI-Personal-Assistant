@@ -80,6 +80,77 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             self.detector.has_red_secret(text)
         )
 
+    def test_detects_email_as_amber(self):
+
+        text = "Email me at demo.user@example.com"
+
+        entities = self.detector.detect(text)
+
+        self.assertEqual(len(entities), 1)
+        self.assertEqual(
+            entities[0].entity_type,
+            "EMAIL",
+        )
+        self.assertEqual(
+            entities[0].risk,
+            "amber",
+        )
+
+    def test_detects_local_sri_lankan_phone(self):
+
+        text = "My phone number is 0771234567"
+
+        entities = self.detector.detect(text)
+
+        self.assertEqual(len(entities), 1)
+        self.assertEqual(
+            entities[0].entity_type,
+            "PHONE",
+        )
+        self.assertEqual(
+            entities[0].risk,
+            "amber",
+        )
+
+    def test_detects_international_sri_lankan_phone(self):
+
+        text = "Call me on +94 77 123 4567"
+
+        entities = self.detector.detect(text)
+
+        self.assertEqual(len(entities), 1)
+        self.assertEqual(
+            entities[0].entity_type,
+            "PHONE",
+        )
+
+    def test_detects_nic_with_context(self):
+
+        text = "My NIC is 200012345678"
+
+        entities = self.detector.detect(text)
+
+        self.assertEqual(len(entities), 1)
+        self.assertEqual(
+            entities[0].entity_type,
+            "NIC",
+        )
+        self.assertEqual(
+            entities[0].risk,
+            "amber",
+        )
+
+    def test_does_not_assume_any_12_digit_number_is_nic(self):
+
+        text = "The reference number is 200012345678"
+
+        entities = self.detector.detect(text)
+
+        self.assertEqual(
+            entities,
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

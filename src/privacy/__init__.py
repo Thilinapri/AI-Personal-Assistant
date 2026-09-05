@@ -3,6 +3,10 @@ from src.privacy.context_selector import (
     ContextSelector,
     ScoredSentence,
 )
+from src.privacy.minimum_disclosure import (
+    DisclosureResult,
+    MinimumDisclosureGate,
+)
 from src.privacy.privacy_capsule import PrivacyCapsule
 from src.privacy.privacy_policy import (
     PrivacyDecision,
@@ -20,6 +24,8 @@ from src.privacy.sensitive_data_detector import (
 __all__ = [
     "ContextSelectionResult",
     "ContextSelector",
+    "DisclosureResult",
+    "MinimumDisclosureGate",
     "PrivacyCapsule",
     "PrivacyDecision",
     "PrivacyPolicy",

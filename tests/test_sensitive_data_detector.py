@@ -496,6 +496,123 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             "red",
         )
 
+    def test_detects_unknown_identifier_as_amber(self):
+
+        text = "Use XJ84922018 for the application."
+
+        entities = self.detector.detect(text)
+
+        unknown_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "UNKNOWN_IDENTIFIER"
+        ]
+
+        self.assertEqual(
+            len(unknown_entities),
+            1,
+        )
+
+        self.assertEqual(
+            unknown_entities[0].risk,
+            "amber",
+        )
+
+        self.assertEqual(
+            text[
+                unknown_entities[0].start:
+                unknown_entities[0].end
+            ],
+            "XJ84922018",
+        )
+
+    def test_detects_hyphenated_unknown_identifier(self):
+
+        text = "Use EMP-882731 for the record."
+
+        entities = self.detector.detect(text)
+
+        unknown_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "UNKNOWN_IDENTIFIER"
+        ]
+
+        self.assertEqual(
+            len(unknown_entities),
+            1,
+        )
+
+    def test_known_passport_is_not_duplicated_as_unknown(self):
+
+        text = "My passport number is N1234567"
+
+        entities = self.detector.detect(text)
+
+        entity_types = [
+            entity.entity_type
+            for entity in entities
+        ]
+
+        self.assertIn(
+            "PASSPORT",
+            entity_types,
+        )
+
+        self.assertNotIn(
+            "UNKNOWN_IDENTIFIER",
+            entity_types,
+        )
+
+    def test_common_alphanumeric_terms_are_not_unknown_identifiers(self):
+
+        samples = [
+            "Meet me in Room101 tomorrow.",
+            "We are using Python314 for testing.",
+            "The build is Version123.",
+            "Course module ABC1234 starts Monday.",
+            "The project is Phase123.",
+        ]
+
+        for text in samples:
+
+            entities = self.detector.detect(text)
+
+            unknown_entities = [
+                entity
+                for entity in entities
+                if entity.entity_type
+                == "UNKNOWN_IDENTIFIER"
+            ]
+
+            self.assertEqual(
+                unknown_entities,
+                [],
+                msg=text,
+            )
+
+    def test_normal_sentence_is_not_unknown_identifier(self):
+
+        text = (
+            "The project meeting is tomorrow."
+        )
+
+        entities = self.detector.detect(text)
+
+        unknown_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type
+            == "UNKNOWN_IDENTIFIER"
+        ]
+
+        self.assertEqual(
+            unknown_entities,
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

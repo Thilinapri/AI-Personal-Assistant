@@ -34,6 +34,7 @@ class Pseudonymizer:
         "DATE_OF_BIRTH": "DOB",
         "ADDRESS": "ADDRESS",
         "PRECISE_LOCATION": "LOCATION",
+        "UNKNOWN_IDENTIFIER": "IDENTIFIER",
     }
 
     def pseudonymize(

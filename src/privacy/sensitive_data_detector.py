@@ -36,6 +36,12 @@ class SensitiveDataDetector:
         r")(?!\d)"
     )
 
+    UNKNOWN_IDENTIFIER_PATTERN = re.compile(
+        r"(?<![A-Za-z0-9_-])"
+        r"([A-Za-z0-9][A-Za-z0-9_-]{6,23})"
+        r"(?![A-Za-z0-9_-])"
+    )
+
     PRECISE_LOCATION_PATTERN = re.compile(
         r"\b(?:"
         r"gps(?:\s+coordinates)?"
@@ -268,6 +274,11 @@ class SensitiveDataDetector:
             entities=entities,
         )
 
+        self._detect_unknown_identifiers(
+            text=text,
+            entities=entities,
+        )
+
         entities.sort(
             key=lambda entity: (
                 entity.start,
@@ -277,6 +288,91 @@ class SensitiveDataDetector:
         )
 
         return self._remove_duplicates(entities)
+
+    def _detect_unknown_identifiers(
+        self,
+        text,
+        entities,
+    ):
+        """
+        Detect opaque identifier-like values that are not
+        already covered by stronger known detectors.
+
+        Unknown identifiers are treated as AMBER because
+        their exact meaning is not known.
+        """
+
+        for match in self.UNKNOWN_IDENTIFIER_PATTERN.finditer(
+            text
+        ):
+            start, end = match.span(1)
+            value = match.group(1)
+
+            # Skip anything already covered by a known
+            # RED or AMBER entity.
+            overlaps_known_entity = any(
+                not (
+                    end <= entity.start
+                    or start >= entity.end
+                )
+                for entity in entities
+            )
+
+            if overlaps_known_entity:
+                continue
+
+            letters = sum(
+                character.isalpha()
+                for character in value
+            )
+
+            digits = sum(
+                character.isdigit()
+                for character in value
+            )
+
+            has_separator = (
+                "-" in value
+                or "_" in value
+            )
+
+            # Must contain both letters and digits.
+            if letters < 1 or digits < 3:
+                continue
+
+            # Hyphenated/underscored values are more likely
+            # to be opaque identifiers.
+            if has_separator:
+                entities.append(
+                    SensitiveEntity(
+                        entity_type="UNKNOWN_IDENTIFIER",
+                        start=start,
+                        end=end,
+                        risk="amber",
+                    )
+                )
+                continue
+
+            # For compact values without separators,
+            # require a stronger identifier-like structure.
+            #
+            # This avoids common false positives such as:
+            # Room101, Python314, Version123, Phase123,
+            # and ABC1234.
+            if (
+                len(value) < 8
+                or digits < 4
+            ):
+                continue
+
+            entities.append(
+                SensitiveEntity(
+                    entity_type="UNKNOWN_IDENTIFIER",
+                    start=start,
+                    end=end,
+                    risk="amber",
+                )
+            )
 
     def has_red_secret(self, text: str) -> bool:
         """Return True if at least one RED secret is detected."""

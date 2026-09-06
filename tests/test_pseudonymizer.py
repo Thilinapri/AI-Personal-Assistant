@@ -310,6 +310,39 @@ class PseudonymizerTests(unittest.TestCase):
                 entities,
             )
 
+    def test_pseudonymizes_unknown_identifier(self):
+
+        text = (
+            "Use XJ84922018 for the application."
+        )
+
+        entities = self.detector.detect(text)
+
+        result = self.pseudonymizer.pseudonymize(
+            text,
+            entities,
+        )
+
+        self.assertEqual(
+            result.text,
+            (
+                "Use <IDENTIFIER_1> "
+                "for the application."
+            ),
+        )
+
+        self.assertEqual(
+            result.mapping[
+                "<IDENTIFIER_1>"
+            ],
+            "XJ84922018",
+        )
+
+        self.assertIn(
+            "UNKNOWN_IDENTIFIER",
+            result.redacted_types,
+        )
+
     def test_result_repr_does_not_expose_mapping_values(self):
 
         text = "Email me at demo@example.com"

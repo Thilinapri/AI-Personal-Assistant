@@ -114,6 +114,20 @@ class SensitiveDataDetector:
                 re.IGNORECASE,
             ),
         ),
+        (
+            "JWT_TOKEN",
+            re.compile(
+                r"(?<![A-Za-z0-9_-])"
+                r"("
+                r"eyJ[A-Za-z0-9_-]{5,}"
+                r"\."
+                r"[A-Za-z0-9_-]{5,}"
+                r"\."
+                r"[A-Za-z0-9_-]{5,}"
+                r")"
+                r"(?![A-Za-z0-9_-])"
+            ),
+        ),
     )
 
     AMBER_PATTERNS = (

@@ -164,6 +164,156 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             "BEARER_TOKEN",
         )
 
+    def test_detects_jwt_token_without_context(self):
+
+        text = (
+            "eyJhbGciOiJIUzI1NiJ9."
+            "eyJ1c2VyIjoiMTIzIn0."
+            "demoSignature123"
+        )
+
+        entities = self.detector.detect(text)
+
+        jwt_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "JWT_TOKEN"
+        ]
+
+        self.assertEqual(
+            len(jwt_entities),
+            1,
+        )
+
+        self.assertEqual(
+            jwt_entities[0].risk,
+            "red",
+        )
+
+        self.assertEqual(
+            text[
+                jwt_entities[0].start:
+                jwt_entities[0].end
+            ],
+            text,
+        )
+
+    def test_arbitrary_dot_separated_value_is_not_jwt(self):
+
+        text = "The version is abc.def.xyz."
+
+        entities = self.detector.detect(text)
+
+        jwt_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "JWT_TOKEN"
+        ]
+
+        self.assertEqual(
+            jwt_entities,
+            [],
+        )
+
+    def test_detects_jwt_without_token_keyword(self):
+
+        text = (
+            "Use "
+            "eyJhbGciOiJIUzI1NiJ9."
+            "eyJ1c2VyIjoiMTIzNDU2In0."
+            "demoSignature12345"
+            " for the request."
+        )
+
+        entities = self.detector.detect(text)
+
+        jwt_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "JWT_TOKEN"
+        ]
+
+        self.assertEqual(
+            len(jwt_entities),
+            1,
+        )
+
+        self.assertEqual(
+            jwt_entities[0].risk,
+            "red",
+        )
+
+    def test_jwt_is_not_duplicated_as_unknown_identifier(self):
+
+        text = (
+            "Use "
+            "eyJhbGciOiJIUzI1NiJ9."
+            "eyJ1c2VyIjoiMTIzNDU2In0."
+            "demoSignature12345"
+        )
+
+        entities = self.detector.detect(text)
+
+        entity_types = [
+            entity.entity_type
+            for entity in entities
+        ]
+
+        self.assertIn(
+            "JWT_TOKEN",
+            entity_types,
+        )
+
+        self.assertNotIn(
+            "UNKNOWN_IDENTIFIER",
+            entity_types,
+        )
+
+    def test_normal_dotted_text_is_not_treated_as_jwt(self):
+
+        samples = [
+            "The software version is 1.2.3.",
+            "Visit docs.example.com for information.",
+            "The filename is report.final.pdf.",
+            "The value abc.def.xyz is just an example.",
+        ]
+
+        for text in samples:
+
+            entities = self.detector.detect(text)
+
+            jwt_entities = [
+                entity
+                for entity in entities
+                if entity.entity_type == "JWT_TOKEN"
+            ]
+
+            self.assertEqual(
+                jwt_entities,
+                [],
+                msg=text,
+            )
+
+    def test_incomplete_jwt_shape_is_not_flagged(self):
+
+        text = (
+            "The example value is "
+            "eyJabc.defghi"
+        )
+
+        entities = self.detector.detect(text)
+
+        jwt_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "JWT_TOKEN"
+        ]
+
+        self.assertEqual(
+            jwt_entities,
+            [],
+        )
+
     def test_normal_text_is_not_flagged(self):
 
         text = (

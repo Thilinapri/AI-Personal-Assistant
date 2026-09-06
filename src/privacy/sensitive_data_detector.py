@@ -70,10 +70,19 @@ class SensitiveDataDetector:
             ),
         ),
         (
+            "PASSWORD",
+            re.compile(
+                r"\b(?:password|passcode)\b"
+                r"\s+"
+                r"(\d{4,8})\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
             "PIN",
             re.compile(
                 r"\bpin(?:\s+(?:code|number))?\b"
-                r"\s*(?:is|=|:)\s*"
+                r"\s*(?:(?:is|=|:)\s*)?"
                 r"[\"']?(\d{4,8})\b",
                 re.IGNORECASE,
             ),

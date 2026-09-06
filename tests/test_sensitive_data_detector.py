@@ -36,6 +36,104 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             "PIN",
         )
 
+    def test_detects_numeric_password_in_natural_speech(self):
+
+        samples = [
+            "My password 4826",
+            "The password 7712",
+            "My passcode 123456",
+        ]
+
+        for text in samples:
+
+            entities = self.detector.detect(text)
+
+            password_entities = [
+                entity
+                for entity in entities
+                if entity.entity_type == "PASSWORD"
+            ]
+
+            self.assertEqual(
+                len(password_entities),
+                1,
+                msg=text,
+            )
+
+            self.assertEqual(
+                password_entities[0].risk,
+                "red",
+            )
+
+    def test_detects_pin_without_separator_word(self):
+
+        samples = [
+            "My PIN 4826",
+            "My PIN code 7712",
+            "My PIN number 123456",
+        ]
+
+        for text in samples:
+
+            entities = self.detector.detect(text)
+
+            pin_entities = [
+                entity
+                for entity in entities
+                if entity.entity_type == "PIN"
+            ]
+
+            self.assertEqual(
+                len(pin_entities),
+                1,
+                msg=text,
+            )
+
+            self.assertEqual(
+                pin_entities[0].risk,
+                "red",
+            )
+
+    def test_random_four_digit_number_is_not_password_or_pin(self):
+
+        text = "The room number is 4826."
+
+        entities = self.detector.detect(text)
+
+        secret_types = {
+            entity.entity_type
+            for entity in entities
+            if entity.entity_type in {
+                "PASSWORD",
+                "PIN",
+            }
+        }
+
+        self.assertEqual(
+            secret_types,
+            set(),
+        )
+
+    def test_password_policy_is_not_treated_as_secret(self):
+
+        text = (
+            "The password policy review "
+            "is on Friday."
+        )
+
+        entities = self.detector.detect(text)
+
+        password_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "PASSWORD"
+        ]
+
+        self.assertEqual(
+            password_entities,
+            [],
+        )
+
     def test_detects_api_key(self):
 
         text = (

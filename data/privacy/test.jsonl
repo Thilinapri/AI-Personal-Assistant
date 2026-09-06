@@ -1,0 +1,24 @@
+{"text":"I have been experiencing severe migraines and my doctor prescribed treatment.","label":1,"category":"HEALTH"}
+{"text":"She was recently diagnosed with a long-term medical condition.","label":1,"category":"HEALTH"}
+{"text":"My medication causes side effects that make me feel dizzy.","label":1,"category":"HEALTH"}
+{"text":"He has been receiving treatment for a mental health condition.","label":1,"category":"HEALTH"}
+{"text":"I missed two loan payments because I did not have enough money.","label":1,"category":"FINANCIAL"}
+{"text":"Her personal savings are nearly exhausted.","label":1,"category":"FINANCIAL"}
+{"text":"My monthly expenses are now higher than my income.","label":1,"category":"FINANCIAL"}
+{"text":"He has substantial debt that he has not been able to repay.","label":1,"category":"FINANCIAL"}
+{"text":"Only close family members know where I currently live.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"I want the location of my residence to remain confidential.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"The record includes private information used to verify my identity.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"Those personal details could reveal exactly who she is.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"The hospital parking area closes at nine PM.","label":0,"category":"SAFE"}
+{"text":"Remind me to attend the health workshop on Saturday.","label":0,"category":"SAFE"}
+{"text":"The loan calculator feature needs another test.","label":0,"category":"SAFE"}
+{"text":"I have a meeting with the accounting team tomorrow.","label":0,"category":"SAFE"}
+{"text":"The bank application will be updated this weekend.","label":0,"category":"SAFE"}
+{"text":"Remember to bring the identity verification form to class.","label":0,"category":"SAFE"}
+{"text":"The passport office will be closed on Friday.","label":0,"category":"SAFE"}
+{"text":"We need to test the map location button before the demo.","label":0,"category":"SAFE"}
+{"text":"My supervisor meeting is scheduled for Wednesday morning.","label":0,"category":"SAFE"}
+{"text":"I need to finish the database report tonight.","label":0,"category":"SAFE"}
+{"text":"Remind me to buy groceries after work.","label":0,"category":"SAFE"}
+{"text":"My favorite place to study is the university library.","label":0,"category":"SAFE"}

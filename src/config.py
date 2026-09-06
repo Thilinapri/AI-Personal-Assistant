@@ -21,3 +21,17 @@ WHISPER_MIN_SILENCE_MS = 500
 
 ENABLE_GEMINI = False
 GEMINI_MODEL = "gemini-3.6-flash"
+
+# ===========================
+# Privacy
+# ===========================
+
+# Optional semantic privacy screening.
+#
+# Uses EchoMind's existing shared MiniLM model.
+# It does not load a second transformer model.
+ENABLE_SEMANTIC_PRIVACY = True
+
+# Optional local NER remains disabled until Raspberry Pi
+# memory and latency benchmarking proves sufficient headroom.
+ENABLE_LOCAL_NER = False

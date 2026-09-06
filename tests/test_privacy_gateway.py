@@ -26,6 +26,42 @@ class FakeContextSelector:
         )
 
 
+class FakeSemanticResult:
+
+    def __init__(
+        self,
+        decision,
+        cloud_safe,
+    ):
+        self.decision = decision
+        self.cloud_safe = cloud_safe
+
+
+class FakeSemanticClassifier:
+
+    def __init__(
+        self,
+        results=None,
+        error=None,
+    ):
+        self.results = results or []
+        self.error = error
+        self.calls = []
+
+    def classify_many(
+        self,
+        texts,
+    ):
+        self.calls.append(
+            list(texts)
+        )
+
+        if self.error is not None:
+            raise self.error
+
+        return self.results
+
+
 class PrivacyGatewayTests(unittest.TestCase):
 
     @staticmethod
@@ -77,6 +113,190 @@ class PrivacyGatewayTests(unittest.TestCase):
         self.assertEqual(
             result.mapping,
             {},
+        )
+
+    def test_semantic_safe_context_is_allowed(self):
+
+        text = (
+            "Remind me tomorrow to submit the report."
+        )
+
+        selector = FakeContextSelector(
+            [
+                self.item(
+                    text,
+                    1.0,
+                    0,
+                )
+            ]
+        )
+
+        semantic_classifier = (
+            FakeSemanticClassifier(
+                results=[
+                    FakeSemanticResult(
+                        decision="SAFE",
+                        cloud_safe=True,
+                    )
+                ]
+            )
+        )
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+            semantic_classifier=(
+                semantic_classifier
+            ),
+        )
+
+        result = gateway.prepare(
+            sentences=[text],
+            mode="immediate",
+            pinned_original_index=0,
+        )
+
+        self.assertTrue(
+            result.cloud_allowed
+        )
+
+        self.assertFalse(
+            result.capsule.blocked
+        )
+
+        self.assertEqual(
+            result.capsule.text,
+            text,
+        )
+
+        self.assertEqual(
+            semantic_classifier.calls,
+            [[text]],
+        )
+
+    def test_semantic_private_content_is_blocked(self):
+
+        text = (
+            "My monthly expenses are higher "
+            "than my income."
+        )
+
+        for decision in [
+            "UNCERTAIN",
+            "SENSITIVE",
+        ]:
+
+            with self.subTest(
+                decision=decision
+            ):
+
+                selector = FakeContextSelector(
+                    [
+                        self.item(
+                            text,
+                            1.0,
+                            0,
+                        )
+                    ]
+                )
+
+                semantic_classifier = (
+                    FakeSemanticClassifier(
+                        results=[
+                            FakeSemanticResult(
+                                decision=decision,
+                                cloud_safe=False,
+                            )
+                        ]
+                    )
+                )
+
+                gateway = PrivacyGateway(
+                    context_selector=selector,
+                    semantic_classifier=(
+                        semantic_classifier
+                    ),
+                )
+
+                result = gateway.prepare(
+                    sentences=[text],
+                    mode="immediate",
+                    pinned_original_index=0,
+                )
+
+                self.assertFalse(
+                    result.cloud_allowed
+                )
+
+                self.assertTrue(
+                    result.capsule.blocked
+                )
+
+                self.assertEqual(
+                    result.capsule.text,
+                    "",
+                )
+
+                self.assertEqual(
+                    result.capsule.block_reason,
+                    "semantic_privacy_blocked",
+                )
+
+    def test_semantic_classifier_error_fails_closed(self):
+
+        text = (
+            "Remind me tomorrow to submit the report."
+        )
+
+        selector = FakeContextSelector(
+            [
+                self.item(
+                    text,
+                    1.0,
+                    0,
+                )
+            ]
+        )
+
+        semantic_classifier = (
+            FakeSemanticClassifier(
+                error=RuntimeError(
+                    "semantic classifier failure"
+                )
+            )
+        )
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+            semantic_classifier=(
+                semantic_classifier
+            ),
+        )
+
+        result = gateway.prepare(
+            sentences=[text],
+            mode="immediate",
+            pinned_original_index=0,
+        )
+
+        self.assertFalse(
+            result.cloud_allowed
+        )
+
+        self.assertTrue(
+            result.capsule.blocked
+        )
+
+        self.assertEqual(
+            result.capsule.text,
+            "",
+        )
+
+        self.assertEqual(
+            result.capsule.block_reason,
+            (
+                "semantic_privacy_"
+                "classifier_error"
+            ),
         )
 
     def test_amber_information_is_pseudonymized(self):

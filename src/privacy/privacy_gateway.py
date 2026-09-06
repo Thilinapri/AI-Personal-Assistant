@@ -85,6 +85,7 @@ class PrivacyGateway:
         policy=None,
         pseudonymizer=None,
         disclosure_gate=None,
+        semantic_classifier=None,
     ):
         if context_selector is None:
             raise ValueError(
@@ -115,6 +116,10 @@ class PrivacyGateway:
             disclosure_gate
             if disclosure_gate is not None
             else MinimumDisclosureGate()
+        )
+
+        self.semantic_classifier = (
+            semantic_classifier
         )
 
     def prepare(
@@ -266,6 +271,98 @@ class PrivacyGateway:
                 reason=reason,
             )
 
+        semantic_filtered = False
+
+        # Optional semantic privacy screening.
+        #
+        # This uses the already-shared embedding model and
+        # performs one batch classification for efficiency.
+        #
+        # SAFE content may continue.
+        # UNCERTAIN and SENSITIVE content remain local.
+        if self.semantic_classifier is not None:
+
+            try:
+                semantic_results = (
+                    self.semantic_classifier.classify_many(
+                        [
+                            item.text
+                            for item in protected_items
+                        ]
+                    )
+                )
+
+            except Exception:
+
+                # Privacy components fail closed.
+                # Never fall back to sending the original text.
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="critical",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_red_types
+                    ),
+                    reason=(
+                        "semantic_privacy_"
+                        "classifier_error"
+                    ),
+                )
+
+            if len(semantic_results) != len(
+                protected_items
+            ):
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="critical",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_red_types
+                    ),
+                    reason=(
+                        "semantic_privacy_"
+                        "result_mismatch"
+                    ),
+                )
+
+            semantically_safe_items = []
+
+            for item, semantic_result in zip(
+                protected_items,
+                semantic_results,
+            ):
+
+                if semantic_result.cloud_safe:
+                    semantically_safe_items.append(
+                        item
+                    )
+
+                else:
+                    semantic_filtered = True
+
+            protected_items = (
+                semantically_safe_items
+            )
+
+            if not protected_items:
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="medium",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_red_types
+                    ),
+                    reason=(
+                        "semantic_privacy_blocked"
+                    ),
+                )
+
         joined_text = self.ITEM_SEPARATOR.join(
             item.text
             for item in protected_items
@@ -397,7 +494,11 @@ class PrivacyGateway:
             risk_level=(
                 "critical"
                 if redacted_red_types
-                else decision.risk_level
+                else (
+                    "medium"
+                    if semantic_filtered
+                    else decision.risk_level
+                )
             ),
             original_sentence_count=(
                 selection.original_sentence_count

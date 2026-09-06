@@ -62,6 +62,39 @@ class FakeSemanticClassifier:
         return self.results
 
 
+class FakeDisclosureResult:
+
+    def __init__(
+        self,
+        text,
+        disclosed_sentence_count=1,
+    ):
+        self.text = text
+        self.disclosed_sentence_count = (
+            disclosed_sentence_count
+        )
+
+
+class FakeDisclosureGate:
+
+    def __init__(
+        self,
+        outbound_text,
+    ):
+        self.outbound_text = outbound_text
+
+    def apply(
+        self,
+        items,
+        mode,
+        pinned_original_index=None,
+    ):
+        return FakeDisclosureResult(
+            text=self.outbound_text,
+            disclosed_sentence_count=1,
+        )
+
+
 class PrivacyGatewayTests(unittest.TestCase):
 
     @staticmethod
@@ -113,6 +146,68 @@ class PrivacyGatewayTests(unittest.TestCase):
         self.assertEqual(
             result.mapping,
             {},
+        )
+
+    def test_final_outbound_red_secret_is_blocked(self):
+
+        safe_text = (
+            "Remind me tomorrow to submit the report."
+        )
+
+        leaked_text = (
+            "Remind me tomorrow to submit the report. "
+            "My password is Secret123."
+        )
+
+        selector = FakeContextSelector(
+            [
+                self.item(
+                    safe_text,
+                    1.0,
+                    0,
+                )
+            ]
+        )
+
+        disclosure_gate = FakeDisclosureGate(
+            outbound_text=leaked_text
+        )
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+            disclosure_gate=disclosure_gate,
+        )
+
+        result = gateway.prepare(
+            sentences=[safe_text],
+            mode="immediate",
+            pinned_original_index=0,
+        )
+
+        self.assertFalse(
+            result.cloud_allowed
+        )
+
+        self.assertTrue(
+            result.capsule.blocked
+        )
+
+        self.assertEqual(
+            result.capsule.text,
+            "",
+        )
+
+        self.assertEqual(
+            result.capsule.block_reason,
+            (
+                "red_secret_detected_"
+                "in_final_capsule"
+            ),
+        )
+
+        self.assertIn(
+            "PASSWORD",
+            result.capsule.redacted_types,
         )
 
     def test_semantic_safe_context_is_allowed(self):

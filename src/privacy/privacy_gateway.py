@@ -479,6 +479,47 @@ class PrivacyGateway:
             ),
         )
 
+        # Final outbound RED safety barrier.
+        #
+        # Re-scan the exact text that would leave the device.
+        # If a critical secret is somehow still detectable,
+        # fail closed instead of sending it to the cloud.
+        final_entities = self.detector.detect(
+            disclosure.text
+        )
+
+        final_red_entities = [
+            entity
+            for entity in final_entities
+            if entity.risk == "red"
+        ]
+
+        if final_red_entities:
+
+            final_red_types = (
+                self._entity_types(
+                    final_red_entities
+                )
+            )
+
+            return self._blocked_result(
+                purpose=purpose,
+                risk_level="critical",
+                original_sentence_count=(
+                    selection.original_sentence_count
+                ),
+                redacted_types=sorted(
+                    set(
+                        redacted_types
+                        + final_red_types
+                    )
+                ),
+                reason=(
+                    "red_secret_detected_"
+                    "in_final_capsule"
+                ),
+            )
+
         # Keep only mappings that are actually present
         # in the final outbound capsule.
         mapping = {

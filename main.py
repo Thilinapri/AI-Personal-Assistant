@@ -9,12 +9,20 @@ from src.ai.memory_engine import MemoryEngine
 from src.ai.disabled_memory_engine import DisabledMemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
 from src.database.database import Database
-from src.config import ENABLE_GEMINI
+from src.config import (
+    ENABLE_GEMINI,
+    ENABLE_SEMANTIC_PRIVACY,
+)
 
 from src.memory.memory_manager import MemoryManager
 from src.memory.embedding_service import EmbeddingService
 from src.memory.retrieval_service import RetrievalService
 from src.memory.rule_based_relationship_classifier import RuleBasedRelationshipClassifier
+from src.privacy.context_selector import ContextSelector
+from src.privacy.privacy_gateway import PrivacyGateway
+from src.privacy.semantic_privacy_classifier import (
+    SemanticPrivacyClassifier,
+)
 
 from src.reminder.reminder_manager import ReminderManager
 
@@ -110,6 +118,30 @@ def main():
 
     embedding_service = EmbeddingService()
 
+    # ---------------------------------
+    # Local Privacy Components
+    # ---------------------------------
+
+    context_selector = ContextSelector(
+        embedding_service=embedding_service,
+    )
+
+    semantic_privacy_classifier = None
+
+    if ENABLE_SEMANTIC_PRIVACY:
+        semantic_privacy_classifier = (
+            SemanticPrivacyClassifier(
+                embedding_service=embedding_service,
+            )
+        )
+
+    privacy_gateway = PrivacyGateway(
+        context_selector=context_selector,
+        semantic_classifier=(
+            semantic_privacy_classifier
+        ),
+    )
+
     retrieval_service = RetrievalService(
         database=database,
         embedding_service=embedding_service,
@@ -184,7 +216,9 @@ def main():
     transcript_buffer = TranscriptBuffer()
 
     if ENABLE_GEMINI:
-        memory_engine = MemoryEngine()
+        memory_engine = MemoryEngine(
+            privacy_gateway=privacy_gateway,
+        )
         print("🤖 Gemini memory processing enabled.")
     else:
         memory_engine = DisabledMemoryEngine()

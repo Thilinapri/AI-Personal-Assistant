@@ -224,7 +224,7 @@ class SensitiveDataDetector:
             re.compile(
                 r"\b(?:home|work|office|residential|postal|mailing)"
                 r"\s+address\b"
-                r"\s*(?:is|=|:)?\s*"
+                r"\s*(?:(?:is\s+)?at|is|=|:)?\s*"
                 r"("
                 r"(?:no\.?\s*)?"
                 r"\d{1,5}[A-Za-z]?"

@@ -471,6 +471,33 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             "amber",
         )
 
+    def test_detects_home_address_with_spoken_at_as_amber(
+        self,
+    ):
+
+        text = (
+            "My home address is at "
+            "25 Example Road, Colombo."
+        )
+
+        entities = self.detector.detect(text)
+
+        address_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "ADDRESS"
+        ]
+
+        self.assertEqual(
+            len(address_entities),
+            1,
+        )
+
+        self.assertEqual(
+            address_entities[0].risk,
+            "amber",
+        )
+
     def test_detects_live_at_address_as_amber(self):
 
         text = (

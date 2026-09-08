@@ -137,8 +137,30 @@ class MemoryEngine:
             response.text
         )
 
+        # Validate cloud-generated content before any
+        # local AMBER placeholders are restored.
+        try:
+            (
+                output_safe,
+                _detected_types,
+            ) = self.privacy_gateway.validate_cloud_output(
+                result
+            )
+
+        except Exception:
+
+            # Output privacy validation also fails closed.
+            return self._empty_result(
+                mode
+            )
+
+        if not output_safe:
+            return self._empty_result(
+                mode
+            )
+
         # Restore AMBER placeholders only after the
-        # cloud response has returned to the local device.
+        # cloud response has passed local output validation.
         return self._rehydrate_value(
             result,
             privacy_result.mapping,

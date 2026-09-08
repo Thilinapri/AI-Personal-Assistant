@@ -74,6 +74,16 @@ class SensitiveDataDetector:
             re.compile(
                 r"\b(?:password|passcode)\b"
                 r"\s+"
+                r"(?=[^\s,;]*\d)"
+                r"([A-Za-z0-9._~+/@#$%^&*!?-]{6,})",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "PASSWORD",
+            re.compile(
+                r"\b(?:password|passcode)\b"
+                r"\s+"
                 r"(\d{4,8})\b",
                 re.IGNORECASE,
             ),

@@ -65,6 +65,37 @@ class SensitiveDataDetectorTests(unittest.TestCase):
                 "red",
             )
 
+    def test_detects_alphanumeric_password_without_separator_in_speech(
+        self,
+    ):
+
+        samples = [
+            "My password Secret123",
+            "The password Demo987",
+            "Use passcode Abc123!",
+        ]
+
+        for text in samples:
+
+            entities = self.detector.detect(text)
+
+            password_entities = [
+                entity
+                for entity in entities
+                if entity.entity_type == "PASSWORD"
+            ]
+
+            self.assertEqual(
+                len(password_entities),
+                1,
+                msg=text,
+            )
+
+            self.assertEqual(
+                password_entities[0].risk,
+                "red",
+            )
+
     def test_detects_pin_without_separator_word(self):
 
         samples = [

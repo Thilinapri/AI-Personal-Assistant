@@ -771,6 +771,146 @@ class PrivacyGatewayTests(unittest.TestCase):
             "no_relevant_context",
         )
 
+    def test_cloud_output_with_safe_text_is_allowed(
+        self,
+    ):
+
+        selector = FakeContextSelector([])
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+        )
+
+        result = {
+            "memories": [
+                {
+                    "content": (
+                        "Submit the report tomorrow."
+                    )
+                }
+            ]
+        }
+
+        is_safe, detected_types = (
+            gateway.validate_cloud_output(
+                result
+            )
+        )
+
+        self.assertTrue(
+            is_safe
+        )
+
+        self.assertEqual(
+            detected_types,
+            [],
+        )
+
+    def test_cloud_output_with_red_secret_is_rejected(
+        self,
+    ):
+
+        selector = FakeContextSelector([])
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+        )
+
+        result = {
+            "memories": [
+                {
+                    "content": (
+                        "Use password Secret123"
+                    )
+                }
+            ]
+        }
+
+        is_safe, detected_types = (
+            gateway.validate_cloud_output(
+                result
+            )
+        )
+
+        self.assertFalse(
+            is_safe
+        )
+
+        self.assertIn(
+            "PASSWORD",
+            detected_types,
+        )
+
+    def test_cloud_output_with_amber_value_is_rejected(
+        self,
+    ):
+
+        selector = FakeContextSelector([])
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+        )
+
+        result = {
+            "memories": [
+                {
+                    "content": (
+                        "Email demo.user@example.com"
+                    )
+                }
+            ]
+        }
+
+        is_safe, detected_types = (
+            gateway.validate_cloud_output(
+                result
+            )
+        )
+
+        self.assertFalse(
+            is_safe
+        )
+
+        self.assertIn(
+            "EMAIL",
+            detected_types,
+        )
+
+    def test_cloud_output_with_placeholder_is_allowed(
+        self,
+    ):
+
+        selector = FakeContextSelector([])
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+        )
+
+        result = {
+            "memories": [
+                {
+                    "content": (
+                        "Email <EMAIL_1> tomorrow."
+                    )
+                }
+            ]
+        }
+
+        is_safe, detected_types = (
+            gateway.validate_cloud_output(
+                result
+            )
+        )
+
+        self.assertTrue(
+            is_safe
+        )
+
+        self.assertEqual(
+            detected_types,
+            [],
+        )
+
     def test_amber_output_can_be_rehydrated_locally(self):
 
         text = (

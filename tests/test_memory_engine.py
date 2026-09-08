@@ -13,10 +13,15 @@ class FakePrivacyGateway:
         self,
         result=None,
         error=None,
+        output_safe=True,
+        validation_error=None,
     ):
         self.result = result
         self.error = error
+        self.output_safe = output_safe
+        self.validation_error = validation_error
         self.calls = []
+        self.validation_calls = []
 
     def prepare(
         self,
@@ -40,6 +45,28 @@ class FakePrivacyGateway:
             raise self.error
 
         return self.result
+
+    def validate_cloud_output(
+        self,
+        value,
+    ):
+        self.validation_calls.append(
+            value
+        )
+
+        if self.validation_error is not None:
+            raise self.validation_error
+
+        if self.output_safe:
+            return (
+                True,
+                [],
+            )
+
+        return (
+            False,
+            ["PASSWORD"],
+        )
 
     @staticmethod
     def rehydrate_output(
@@ -317,6 +344,92 @@ class MemoryEnginePrivacyTests(
                 "Email person@example.com "
                 "tomorrow"
             ),
+        )
+
+    def test_unsafe_cloud_output_is_discarded_before_rehydration(
+        self,
+    ):
+
+        privacy_result = SimpleNamespace(
+            cloud_allowed=True,
+            capsule=SimpleNamespace(
+                text="Safe sanitized context."
+            ),
+            mapping={},
+        )
+
+        gateway = FakePrivacyGateway(
+            result=privacy_result,
+            output_safe=False,
+        )
+
+        engine = self.make_engine(
+            gateway
+        )
+
+        self.client.models.generate_content.return_value = (
+            SimpleNamespace(
+                text=(
+                    '{"memories": ['
+                    '{"content": '
+                    '"Use password Secret123"'
+                    '}]}'
+                )
+            )
+        )
+
+        result = engine.process(
+            mode="immediate",
+            text="Safe sanitized context.",
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "memories": [],
+            },
+        )
+
+        self.assertEqual(
+            len(gateway.validation_calls),
+            1,
+        )
+
+    def test_cloud_output_validation_error_fails_closed(
+        self,
+    ):
+
+        privacy_result = SimpleNamespace(
+            cloud_allowed=True,
+            capsule=SimpleNamespace(
+                text="Safe sanitized context."
+            ),
+            mapping={},
+        )
+
+        gateway = FakePrivacyGateway(
+            result=privacy_result,
+            validation_error=RuntimeError(
+                "output validation failure"
+            ),
+        )
+
+        engine = self.make_engine(
+            gateway
+        )
+
+        result = engine.process(
+            mode="immediate",
+            text="Safe sanitized context.",
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "memories": [],
+            },
         )
 
 

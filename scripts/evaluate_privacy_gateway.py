@@ -200,6 +200,8 @@ def evaluate_configuration(
 
     total_sensitive_values = 0
     total_leaked_values = 0
+    total_sensitive_content_terms = 0
+    total_exposed_sensitive_content_terms = 0
 
     total_utility_terms = 0
     total_retained_utility_terms = 0
@@ -316,6 +318,35 @@ def evaluate_configuration(
             else 0.0
         )
 
+        sensitive_content_terms = row.get(
+            "sensitive_content_terms",
+            [],
+        )
+
+        exposed_sensitive_content_terms = [
+            term
+            for term in sensitive_content_terms
+            if contains_value(
+                outbound_text,
+                term,
+            )
+        ]
+
+        sensitive_content_count = len(
+            sensitive_content_terms
+        )
+
+        exposed_sensitive_content_count = len(
+            exposed_sensitive_content_terms
+        )
+
+        scer = (
+            exposed_sensitive_content_count
+            / sensitive_content_count
+            if sensitive_content_count
+            else 0.0
+        )
+
         utility_terms = row.get(
             "utility_terms",
             [],
@@ -370,6 +401,14 @@ def evaluate_configuration(
             leak_count
         )
 
+        total_sensitive_content_terms += (
+            sensitive_content_count
+        )
+
+        total_exposed_sensitive_content_terms += (
+            exposed_sensitive_content_count
+        )
+
         total_utility_terms += (
             utility_count
         )
@@ -410,6 +449,16 @@ def evaluate_configuration(
             ),
             "selr": round(
                 selr,
+                4,
+            ),
+            "sensitive_content_term_count": (
+                sensitive_content_count
+            ),
+            "exposed_sensitive_content_count": (
+                exposed_sensitive_content_count
+            ),
+            "scer": round(
+                scer,
                 4,
             ),
             "utility_term_count": (
@@ -453,6 +502,8 @@ def evaluate_configuration(
             f"{cdr:.3f}",
             "| leaks=",
             leak_count,
+            "| SCER=",
+            f"{scer:.3f}",
             "| utility=",
             f"{utility_retention:.3f}",
             "| latency=",
@@ -491,6 +542,13 @@ def evaluate_configuration(
         total_leaked_values
         / total_sensitive_values
         if total_sensitive_values
+        else 0.0
+    )
+
+    overall_scer = (
+        total_exposed_sensitive_content_terms
+        / total_sensitive_content_terms
+        if total_sensitive_content_terms
         else 0.0
     )
 
@@ -552,6 +610,11 @@ def evaluate_configuration(
     )
 
     print(
+        "Sensitive Content Exposure Rate (SCER):",
+        f"{overall_scer:.3f}",
+    )
+
+    print(
         "Memory Utility Retention:",
         f"{overall_utility:.3f}",
     )
@@ -590,6 +653,7 @@ def evaluate_configuration(
         ),
         "cdr": overall_cdr,
         "selr": overall_selr,
+        "scer": overall_scer,
         "utility_retention": (
             overall_utility
         ),
@@ -712,9 +776,10 @@ def main():
 
     print(
         f"{'Configuration':<15}"
-        f"{'Accuracy':>10}"
+        f"{'Decision':>10}"
         f"{'CDR':>10}"
         f"{'SELR':>10}"
+        f"{'SCER':>10}"
         f"{'Utility':>10}"
         f"{'Avg ms':>10}"
     )
@@ -725,6 +790,7 @@ def main():
             f"{summary['decision_accuracy']:>10.3f}"
             f"{summary['cdr']:>10.3f}"
             f"{summary['selr']:>10.3f}"
+            f"{summary['scer']:>10.3f}"
             f"{summary['utility_retention']:>10.3f}"
             f"{summary['average_latency_ms']:>10.2f}"
         )

@@ -5,6 +5,9 @@ from pathlib import Path
 
 from src.memory.embedding_service import EmbeddingService
 from src.privacy.context_selector import ContextSelector
+from src.privacy.minimum_disclosure import (
+    MinimumDisclosureGate,
+)
 from src.privacy.privacy_gateway import PrivacyGateway
 from src.privacy.semantic_privacy_classifier import (
     SemanticPrivacyClassifier,
@@ -17,6 +20,18 @@ DATA_PATH = Path(
 
 RESULTS_PATH = Path(
     "results/privacy_gateway_evaluation.csv"
+)
+
+BASELINE_RESULTS_PATH = Path(
+    "results/privacy_gateway_baseline.csv"
+)
+
+DETERMINISTIC_RESULTS_PATH = Path(
+    "results/privacy_gateway_deterministic.csv"
+)
+
+HYBRID_RESULTS_PATH = Path(
+    "results/privacy_gateway_hybrid.csv"
 )
 
 
@@ -55,54 +70,125 @@ def contains_value(
     )
 
 
-def main():
+class BaselineResult:
+    """
+    Minimal result object used by the evaluation baseline.
 
-    rows = load_jsonl(
-        DATA_PATH
-    )
+    The baseline applies context relevance and minimum
+    disclosure, but intentionally performs no sensitive-data
+    protection.
+    """
 
-    print(
-        f"Loaded {len(rows)} gateway scenarios."
-    )
+    def __init__(
+        self,
+        text,
+        original_sentence_count,
+        selected_sentence_count,
+    ):
+        self.cloud_allowed = bool(
+            text.strip()
+        )
 
-    print(
-        "Loading shared MiniLM..."
-    )
+        self.capsule = type(
+            "BaselineCapsule",
+            (),
+            {
+                "text": text,
+                "risk_level": "none",
+                "block_reason": None,
+                "redacted_types": [],
+                "original_sentence_count": (
+                    original_sentence_count
+                ),
+                "selected_sentence_count": (
+                    selected_sentence_count
+                ),
+            },
+        )()
 
-    embedding_service = (
-        EmbeddingService()
-    )
 
-    context_selector = (
-        ContextSelector(
-            embedding_service=(
-                embedding_service
+class BaselineGateway:
+    """
+    Evaluation-only baseline.
+
+    Uses the same ContextSelector and MinimumDisclosureGate,
+    but deliberately skips privacy detection, pseudonymization,
+    and semantic privacy screening.
+    """
+
+    def __init__(
+        self,
+        context_selector,
+        disclosure_gate=None,
+    ):
+        self.context_selector = (
+            context_selector
+        )
+
+        self.disclosure_gate = (
+            disclosure_gate
+            if disclosure_gate is not None
+            else MinimumDisclosureGate()
+        )
+
+    def prepare(
+        self,
+        sentences,
+        mode,
+        purpose="privacy_evaluation",
+        pinned_original_index=None,
+    ):
+        selection = (
+            self.context_selector.select(
+                sentences
             )
         )
-    )
 
-    semantic_classifier = (
-        SemanticPrivacyClassifier(
-            embedding_service=(
-                embedding_service
+        if not selection.selected_items:
+            return BaselineResult(
+                text="",
+                original_sentence_count=(
+                    selection.original_sentence_count
+                ),
+                selected_sentence_count=0,
+            )
+
+        disclosure = (
+            self.disclosure_gate.apply(
+                selection.selected_items,
+                mode=mode,
+                pinned_original_index=(
+                    pinned_original_index
+                ),
             )
         )
-    )
 
-    gateway = PrivacyGateway(
-        context_selector=context_selector,
-        semantic_classifier=(
-            semantic_classifier
-        ),
-    )
+        return BaselineResult(
+            text=disclosure.text,
+            original_sentence_count=(
+                selection.original_sentence_count
+            ),
+            selected_sentence_count=(
+                disclosure.disclosed_sentence_count
+            ),
+        )
 
-    # Warm up the shared embedding model before
-    # latency measurements.
-    embedding_service.encode(
-        "Privacy evaluation warm up."
-    )
 
-    RESULTS_PATH.parent.mkdir(
+def evaluate_configuration(
+    rows,
+    gateway,
+    label,
+    results_path,
+):
+    """
+    Evaluate one privacy configuration using the same
+    scenarios and metrics.
+
+    Keeping this logic shared ensures that BASELINE,
+    DETERMINISTIC, and HYBRID are compared fairly.
+    """
+
+    results_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
@@ -293,6 +379,7 @@ def main():
         )
 
         evaluation_row = {
+            "configuration": label,
             "id": row["id"],
             "category": row["category"],
             "mode": mode,
@@ -376,7 +463,7 @@ def main():
         results[0].keys()
     )
 
-    with RESULTS_PATH.open(
+    with results_path.open(
         "w",
         newline="",
         encoding="utf-8",
@@ -439,7 +526,7 @@ def main():
         "========================================"
     )
     print(
-        "Privacy Gateway Evaluation Summary"
+        f"Privacy Gateway Evaluation Summary - {label}"
     )
     print(
         "========================================"
@@ -492,8 +579,155 @@ def main():
     print()
     print(
         "Results written to:",
-        RESULTS_PATH,
+        results_path,
     )
+
+    return {
+        "label": label,
+        "scenarios": len(rows),
+        "decision_accuracy": (
+            decision_accuracy
+        ),
+        "cdr": overall_cdr,
+        "selr": overall_selr,
+        "utility_retention": (
+            overall_utility
+        ),
+        "average_latency_ms": (
+            average_latency
+        ),
+        "maximum_latency_ms": (
+            maximum_latency
+        ),
+        "sensitive_values_tested": (
+            total_sensitive_values
+        ),
+        "sensitive_values_leaked": (
+            total_leaked_values
+        ),
+    }
+
+
+def main():
+
+    rows = load_jsonl(
+        DATA_PATH
+    )
+
+    print(
+        f"Loaded {len(rows)} gateway scenarios."
+    )
+
+    print(
+        "Loading shared MiniLM..."
+    )
+
+    embedding_service = (
+        EmbeddingService()
+    )
+
+    context_selector = (
+        ContextSelector(
+            embedding_service=(
+                embedding_service
+            )
+        )
+    )
+
+    semantic_classifier = (
+        SemanticPrivacyClassifier(
+            embedding_service=(
+                embedding_service
+            )
+        )
+    )
+
+    baseline_gateway = BaselineGateway(
+        context_selector=context_selector
+    )
+
+    # Deterministic privacy configuration:
+    # context relevance + RED/AMBER protection
+    # without semantic privacy classification.
+    deterministic_gateway = PrivacyGateway(
+        context_selector=context_selector,
+        semantic_classifier=None,
+    )
+
+    # Hybrid privacy configuration:
+    # deterministic protection + semantic privacy.
+    #
+    # Both configurations reuse the same ContextSelector
+    # and the same shared MiniLM embedding service.
+    hybrid_gateway = PrivacyGateway(
+        context_selector=context_selector,
+        semantic_classifier=(
+            semantic_classifier
+        ),
+    )
+
+    # Warm up the shared embedding model before
+    # latency measurements.
+    embedding_service.encode(
+        "Privacy evaluation warm up."
+    )
+
+    baseline_summary = evaluate_configuration(
+        rows=rows,
+        gateway=baseline_gateway,
+        label="BASELINE",
+        results_path=BASELINE_RESULTS_PATH,
+    )
+
+    deterministic_summary = evaluate_configuration(
+        rows=rows,
+        gateway=deterministic_gateway,
+        label="DETERMINISTIC",
+        results_path=DETERMINISTIC_RESULTS_PATH,
+    )
+
+    hybrid_summary = evaluate_configuration(
+        rows=rows,
+        gateway=hybrid_gateway,
+        label="HYBRID",
+        results_path=HYBRID_RESULTS_PATH,
+    )
+
+    summaries = [
+        baseline_summary,
+        deterministic_summary,
+        hybrid_summary,
+    ]
+
+    print()
+    print(
+        "==============================================="
+    )
+    print(
+        "Privacy Configuration Comparison"
+    )
+    print(
+        "==============================================="
+    )
+
+    print(
+        f"{'Configuration':<15}"
+        f"{'Accuracy':>10}"
+        f"{'CDR':>10}"
+        f"{'SELR':>10}"
+        f"{'Utility':>10}"
+        f"{'Avg ms':>10}"
+    )
+
+    for summary in summaries:
+        print(
+            f"{summary['label']:<15}"
+            f"{summary['decision_accuracy']:>10.3f}"
+            f"{summary['cdr']:>10.3f}"
+            f"{summary['selr']:>10.3f}"
+            f"{summary['utility_retention']:>10.3f}"
+            f"{summary['average_latency_ms']:>10.2f}"
+        )
 
 
 if __name__ == "__main__":

@@ -271,105 +271,17 @@ class PrivacyGateway:
                 reason=reason,
             )
 
-        semantic_filtered = False
-
-        # Optional semantic privacy screening.
+        # Detect AMBER information and pseudonymize it
+        # before semantic privacy screening.
         #
-        # This uses the already-shared embedding model and
-        # performs one batch classification for efficiency.
-        #
-        # SAFE content may continue.
-        # UNCERTAIN and SENSITIVE content remain local.
-        if self.semantic_classifier is not None:
-
-            try:
-                semantic_results = (
-                    self.semantic_classifier.classify_many(
-                        [
-                            item.text
-                            for item in protected_items
-                        ]
-                    )
-                )
-
-            except Exception:
-
-                # Privacy components fail closed.
-                # Never fall back to sending the original text.
-                return self._blocked_result(
-                    purpose=purpose,
-                    risk_level="critical",
-                    original_sentence_count=(
-                        selection.original_sentence_count
-                    ),
-                    redacted_types=(
-                        redacted_red_types
-                    ),
-                    reason=(
-                        "semantic_privacy_"
-                        "classifier_error"
-                    ),
-                )
-
-            if len(semantic_results) != len(
-                protected_items
-            ):
-                return self._blocked_result(
-                    purpose=purpose,
-                    risk_level="critical",
-                    original_sentence_count=(
-                        selection.original_sentence_count
-                    ),
-                    redacted_types=(
-                        redacted_red_types
-                    ),
-                    reason=(
-                        "semantic_privacy_"
-                        "result_mismatch"
-                    ),
-                )
-
-            semantically_safe_items = []
-
-            for item, semantic_result in zip(
-                protected_items,
-                semantic_results,
-            ):
-
-                if semantic_result.cloud_safe:
-                    semantically_safe_items.append(
-                        item
-                    )
-
-                else:
-                    semantic_filtered = True
-
-            protected_items = (
-                semantically_safe_items
-            )
-
-            if not protected_items:
-                return self._blocked_result(
-                    purpose=purpose,
-                    risk_level="medium",
-                    original_sentence_count=(
-                        selection.original_sentence_count
-                    ),
-                    redacted_types=(
-                        redacted_red_types
-                    ),
-                    reason=(
-                        "semantic_privacy_blocked"
-                    ),
-                )
-
+        # The semantic classifier should never receive
+        # exact personal values that we already know
+        # how to sanitize deterministically.
         joined_text = self.ITEM_SEPARATOR.join(
             item.text
             for item in protected_items
         )
 
-        # Run the detector again across the exact text that
-        # is now being considered for disclosure.
         entities = self.detector.detect(
             joined_text
         )
@@ -378,9 +290,9 @@ class PrivacyGateway:
             entities
         )
 
-        # This should normally be unreachable because RED
-        # content was handled above. Keep it as a fail-closed
-        # safety barrier.
+        # RED content should already have been handled
+        # sentence-by-sentence above. Keep this as a
+        # fail-closed safety barrier.
         if not decision.cloud_allowed:
             return self._blocked_result(
                 purpose=purpose,
@@ -458,18 +370,116 @@ class PrivacyGateway:
                 ),
             )
 
+        # Rebuild the selected items using the
+        # locally sanitized text.
         protected_items = [
             ScoredSentence(
-                text=protected_text,
+                text=sanitized_text,
                 score=item.score,
                 original_index=item.original_index,
-                selection_source=item.selection_source,
+                selection_source=(
+                    item.selection_source
+                ),
             )
-            for item, protected_text in zip(
+            for item, sanitized_text in zip(
                 protected_items,
                 protected_sentences,
             )
         ]
+
+        semantic_filtered = False
+
+        # Optional semantic privacy screening.
+        #
+        # IMPORTANT:
+        # Semantic screening happens AFTER known AMBER
+        # values have been pseudonymized. Therefore the
+        # classifier receives placeholders such as
+        # <EMAIL_1> or <ID_1>, not the original value.
+        #
+        # SAFE content may continue.
+        # UNCERTAIN and SENSITIVE content remain local.
+        if self.semantic_classifier is not None:
+
+            try:
+                semantic_results = (
+                    self.semantic_classifier.classify_many(
+                        [
+                            item.text
+                            for item in protected_items
+                        ]
+                    )
+                )
+
+            except Exception:
+
+                # Privacy components fail closed.
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="critical",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_types
+                    ),
+                    reason=(
+                        "semantic_privacy_"
+                        "classifier_error"
+                    ),
+                )
+
+            if len(semantic_results) != len(
+                protected_items
+            ):
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="critical",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_types
+                    ),
+                    reason=(
+                        "semantic_privacy_"
+                        "result_mismatch"
+                    ),
+                )
+
+            semantically_safe_items = []
+
+            for item, semantic_result in zip(
+                protected_items,
+                semantic_results,
+            ):
+
+                if semantic_result.cloud_safe:
+                    semantically_safe_items.append(
+                        item
+                    )
+
+                else:
+                    semantic_filtered = True
+
+            protected_items = (
+                semantically_safe_items
+            )
+
+            if not protected_items:
+                return self._blocked_result(
+                    purpose=purpose,
+                    risk_level="medium",
+                    original_sentence_count=(
+                        selection.original_sentence_count
+                    ),
+                    redacted_types=(
+                        redacted_types
+                    ),
+                    reason=(
+                        "semantic_privacy_blocked"
+                    ),
+                )
 
         disclosure = self.disclosure_gate.apply(
             protected_items,

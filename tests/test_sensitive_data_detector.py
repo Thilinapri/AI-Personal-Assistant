@@ -180,6 +180,30 @@ class SensitiveDataDetectorTests(unittest.TestCase):
             "API_KEY",
         )
 
+    def test_api_key_phrase_without_secret_is_not_detected(
+        self,
+    ):
+
+        text = (
+            "Remind me to rotate the "
+            "API key tomorrow."
+        )
+
+        entities = self.detector.detect(
+            text
+        )
+
+        api_key_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "API_KEY"
+        ]
+
+        self.assertEqual(
+            api_key_entities,
+            [],
+        )
+
     def test_detects_bearer_token(self):
 
         text = (
@@ -416,6 +440,35 @@ class SensitiveDataDetectorTests(unittest.TestCase):
         )
         self.assertEqual(
             entities[0].risk,
+            "amber",
+        )
+
+    def test_detects_nic_number_natural_phrase(
+        self,
+    ):
+
+        text = (
+            "My NIC number is "
+            "200012345678"
+        )
+
+        entities = self.detector.detect(
+            text
+        )
+
+        nic_entities = [
+            entity
+            for entity in entities
+            if entity.entity_type == "NIC"
+        ]
+
+        self.assertEqual(
+            len(nic_entities),
+            1,
+        )
+
+        self.assertEqual(
+            nic_entities[0].risk,
             "amber",
         )
 
@@ -781,7 +834,7 @@ class SensitiveDataDetectorTests(unittest.TestCase):
 
         text = (
             "Remind me Friday to rotate "
-            "API key ABCDEFGHIJK"
+            "API key ABCDEFGHIJ1"
         )
 
         entities = self.detector.detect(text)

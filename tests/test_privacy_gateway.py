@@ -268,6 +268,78 @@ class PrivacyGatewayTests(unittest.TestCase):
             [[text]],
         )
 
+    def test_amber_data_is_pseudonymized_before_semantic_screening(
+        self,
+    ):
+
+        text = (
+            "Remind me to bring my NIC number "
+            "200012345678 tomorrow."
+        )
+
+        selector = FakeContextSelector(
+            [
+                self.item(
+                    text,
+                    1.0,
+                    0,
+                )
+            ]
+        )
+
+        semantic_classifier = (
+            FakeSemanticClassifier(
+                results=[
+                    FakeSemanticResult(
+                        decision="SAFE",
+                        cloud_safe=True,
+                    )
+                ]
+            )
+        )
+
+        gateway = PrivacyGateway(
+            context_selector=selector,
+            semantic_classifier=(
+                semantic_classifier
+            ),
+        )
+
+        result = gateway.prepare(
+            sentences=[text],
+            mode="immediate",
+            pinned_original_index=0,
+        )
+
+        expected_semantic_text = (
+            "Remind me to bring my NIC number "
+            "<ID_1> tomorrow."
+        )
+
+        self.assertEqual(
+            semantic_classifier.calls,
+            [[expected_semantic_text]],
+        )
+
+        self.assertTrue(
+            result.cloud_allowed
+        )
+
+        self.assertNotIn(
+            "200012345678",
+            result.capsule.text,
+        )
+
+        self.assertIn(
+            "<ID_1>",
+            result.capsule.text,
+        )
+
+        self.assertIn(
+            "NIC",
+            result.capsule.redacted_types,
+        )
+
     def test_semantic_private_content_is_blocked(self):
 
         text = (
@@ -629,7 +701,7 @@ class PrivacyGatewayTests(unittest.TestCase):
 
         text = (
             "Remind me Friday to rotate "
-            "API key ABCDEFGHIJK."
+            "API key ABCDEFGHIJ1."
         )
 
         selector = FakeContextSelector(

@@ -110,8 +110,28 @@ class SensitiveDataDetector:
             "API_KEY",
             re.compile(
                 r"\b(?:api[_ -]?key|access[_ -]?token|auth[_ -]?token)\b"
-                r"\s*(?:is|=|:)?\s*"
-                r"[\"']?([A-Za-z0-9._~+\-/=]{8,}?)"
+                r"\s*(?:is|=|:)\s*"
+                r"[\"']?"
+                r"("
+                r"[A-Za-z0-9_~+\-/=]"
+                r"[A-Za-z0-9._~+\-/=]{6,}"
+                r"[A-Za-z0-9_~+\-/=]"
+                r")"
+                r"(?=[\s.,!?;]|$)",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "API_KEY",
+            re.compile(
+                r"\b(?:api[_ -]?key|access[_ -]?token|auth[_ -]?token)\b"
+                r"\s+"
+                r"(?=[A-Za-z0-9._~+\-/=]*\d)"
+                r"("
+                r"[A-Za-z0-9_~+\-/=]"
+                r"[A-Za-z0-9._~+\-/=]{6,}"
+                r"[A-Za-z0-9_~+\-/=]"
+                r")"
                 r"(?=[\s.,!?;]|$)",
                 re.IGNORECASE,
             ),
@@ -168,7 +188,7 @@ class SensitiveDataDetector:
             "NIC",
             re.compile(
                 r"\b(?:"
-                r"nic"
+                r"nic(?:\s+(?:number|no))?"
                 r"|national\s+(?:identity|id)"
                 r"(?:\s+(?:number|no))?"
                 r"|identity\s+card"

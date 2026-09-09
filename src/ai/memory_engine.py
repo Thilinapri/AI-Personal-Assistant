@@ -49,7 +49,7 @@ class MemoryEngine:
     def process(
         self,
         mode,
-        text,
+        sentences,
         current_time,
     ):
 
@@ -61,15 +61,16 @@ class MemoryEngine:
                 f"Unsupported memory engine mode: {mode}"
             )
 
-        # Current AudioWorker and SessionProcessor provide
-        # newline-separated transcript context.
-        #
-        # Convert it back to individual local sentences before
-        # passing anything through the PrivacyGateway.
+        # Transcript context is passed as structured local
+        # sentence items. Do not join and split conversation
+        # context across the privacy boundary.
         sentences = [
-            line.strip()
-            for line in text.splitlines()
-            if line.strip()
+            sentence.strip()
+            for sentence in sentences
+            if (
+                isinstance(sentence, str)
+                and sentence.strip()
+            )
         ]
 
         privacy_mode = (

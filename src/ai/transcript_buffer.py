@@ -31,7 +31,7 @@ class TranscriptBuffer:
             return entry_id
 
     def add_with_context(self, text, before=2, after=0):
-        """Add an entry and atomically return its surrounding text context."""
+        """Add an entry and atomically return surrounding sentence context."""
 
         with self._lock:
             entry_id = self._next_entry_id
@@ -47,10 +47,10 @@ class TranscriptBuffer:
             start = max(0, index - before)
             end = min(len(self._sentences), index + after + 1)
 
-            context = "\n".join(
+            context = [
                 entry["text"]
                 for entry in self._sentences[start:end]
-            )
+            ]
 
             return entry_id, context
 

@@ -197,9 +197,9 @@ class MemoryEnginePrivacyTests(
 
         result = engine.process(
             mode="immediate",
-            text=(
+            sentences=[
                 "My password is Secret123."
-            ),
+            ],
             current_time=datetime.now(),
         )
 
@@ -228,9 +228,9 @@ class MemoryEnginePrivacyTests(
 
         result = engine.process(
             mode="immediate",
-            text=(
+            sentences=[
                 "Raw private transcript."
-            ),
+            ],
             current_time=datetime.now(),
         )
 
@@ -275,7 +275,9 @@ class MemoryEnginePrivacyTests(
 
         engine.process(
             mode="immediate",
-            text=raw_text,
+            sentences=[
+                raw_text
+            ],
             current_time=datetime.now(),
         )
 
@@ -331,10 +333,12 @@ class MemoryEnginePrivacyTests(
 
         result = engine.process(
             mode="immediate",
-            text=(
-                "Remind me to email "
-                "person@example.com tomorrow."
-            ),
+            sentences=[
+                (
+                    "Remind me to email "
+                    "person@example.com tomorrow."
+                )
+            ],
             current_time=datetime.now(),
         )
 
@@ -380,7 +384,9 @@ class MemoryEnginePrivacyTests(
 
         result = engine.process(
             mode="immediate",
-            text="Safe sanitized context.",
+            sentences=[
+                "Safe sanitized context."
+            ],
             current_time=datetime.now(),
         )
 
@@ -421,7 +427,9 @@ class MemoryEnginePrivacyTests(
 
         result = engine.process(
             mode="immediate",
-            text="Safe sanitized context.",
+            sentences=[
+                "Safe sanitized context."
+            ],
             current_time=datetime.now(),
         )
 

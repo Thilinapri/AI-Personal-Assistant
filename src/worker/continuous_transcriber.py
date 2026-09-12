@@ -12,7 +12,6 @@ class ContinuousTranscriber:
     audio chunks onto the AudioWorker queue.
 
     Whisper performs speech detection inside each chunk using Silero VAD.
-
     The queue insertion is non-blocking so microphone capture will not
     freeze when the AudioWorker is busy.
     """
@@ -96,7 +95,6 @@ class ContinuousTranscriber:
                         position = 0
 
                         self.microphone.stop()
-
                         is_paused = True
 
                         print(
@@ -112,9 +110,7 @@ class ContinuousTranscriber:
                 # ---------------------------------
 
                 if is_paused:
-
                     self.microphone.start()
-
                     is_paused = False
 
                     print(
@@ -127,7 +123,6 @@ class ContinuousTranscriber:
                 # ---------------------------------
 
                 audio = self.microphone.read()
-
                 samples = audio.shape[0]
 
                 audio_buffer[
@@ -143,19 +138,21 @@ class ContinuousTranscriber:
                 position = 0
 
                 print(
-                    f"🎙️ Audio chunk ready "
+                    "🎙️ Audio chunk ready "
                     f"({self.CHUNK_SECONDS}s)"
                 )
 
                 self._enqueue_chunk(chunk)
 
         except Exception as error:
+
             print(
                 "Continuous transcription "
                 f"capture error: {error}"
             )
 
         finally:
+
             print(
                 "🎧 Continuous listening stopped."
             )

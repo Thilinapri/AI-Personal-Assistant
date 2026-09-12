@@ -194,7 +194,7 @@ def main():
     # Audio Queue
     # ---------------------------------
 
-    audio_queue = queue.Queue()
+    audio_queue = queue.Queue(maxsize=2)
 
     # ---------------------------------
     # Audio Worker

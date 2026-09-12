@@ -1,3 +1,4 @@
+import queue
 import threading
 
 import numpy as np
@@ -11,6 +12,9 @@ class ContinuousTranscriber:
     audio chunks onto the AudioWorker queue.
 
     Whisper performs speech detection inside each chunk using Silero VAD.
+
+    The queue insertion is non-blocking so microphone capture will not
+    freeze when the AudioWorker is busy.
     """
 
     CHUNK_SECONDS = 20
@@ -143,7 +147,7 @@ class ContinuousTranscriber:
                     f"({self.CHUNK_SECONDS}s)"
                 )
 
-                self.audio_queue.put(chunk)
+                self._enqueue_chunk(chunk)
 
         except Exception as error:
             print(

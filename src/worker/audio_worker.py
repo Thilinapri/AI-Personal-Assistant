@@ -27,7 +27,7 @@ class AudioWorker:
         self._stop_event.set()
 
     def run(self):
-        """Consume audio until the queue sentinel is received."""
+        """Consume audio from the queue until a sentinel is received."""
 
         while True:
             audio = self.audio_queue.get()
@@ -74,10 +74,10 @@ class AudioWorker:
             )
             return
 
-        if not transcription or not transcription.strip():
-            return
-
         transcription = transcription.strip()
+
+        if not transcription:
+            return
 
         # -------------------------------------------------
         # 2. Add transcription to conversation buffer
@@ -123,8 +123,7 @@ class AudioWorker:
             )
             return
 
-        # No immediate keyword.
-        # Keep the transcript in the 20-minute buffer.
+        # Keep normal conversation in the session buffer.
         if not should_process:
             return
 
@@ -152,11 +151,11 @@ class AudioWorker:
                 current_time=datetime.now(),
             )
 
+            memories = result.get("memories", [])
+
             print(
                 f"🤖 Gemini result: {result!r}"
             )
-
-            memories = result["memories"]
 
             print(
                 f"🧠 Memories extracted: {memories!r}"
@@ -174,13 +173,11 @@ class AudioWorker:
             return
 
         # -------------------------------------------------
-        # 5. Store memories using the new MemoryManager
+        # 5. Store memories using MemoryManager
         # -------------------------------------------------
 
         try:
-            self.memory_manager.store_memories(
-                memories
-            )
+            self.memory_manager.store_memories(memories)
 
             print(
                 "💾 Memories saved through MemoryManager."

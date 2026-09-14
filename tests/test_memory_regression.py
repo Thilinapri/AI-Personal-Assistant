@@ -331,10 +331,38 @@ class MemoryRegressionTests(unittest.TestCase):
         results = self.retrieval_service.search(
             "When is my project meeting?",
             limit=3,
+            min_score=0.15,
         )
 
         self.assertGreater(len(results), 0)
         self.assertEqual(results[0]["title"], "Project meeting")
+
+        shopping_results = self.retrieval_service.search(
+            "What do I need to buy?",
+            limit=3,
+            min_score=0.15,
+        )
+
+        self.assertGreater(
+            len(shopping_results),
+            0,
+        )
+
+        self.assertEqual(
+            shopping_results[0]["title"],
+            "Buy milk",
+        )
+
+        unrelated_results = self.retrieval_service.search(
+            "What is the weather in Tokyo?",
+            limit=3,
+            min_score=0.15,
+        )
+
+        self.assertEqual(
+            unrelated_results,
+            [],
+        )
 
     def test_background_reminder_worker(self):
         triggered = []

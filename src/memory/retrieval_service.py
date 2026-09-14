@@ -8,7 +8,12 @@ class RetrievalService:
         self.database = database
         self.embedding_service = embedding_service
 
-    def search(self, query, limit=5):
+    def search(
+        self,
+        query,
+        limit=5,
+        min_score=None,
+    ):
         """Return the most semantically relevant active memories."""
 
         if not query or not query.strip():
@@ -39,6 +44,12 @@ class RetrievalService:
                 query_embedding,
                 memory_embedding
             )
+
+            if (
+                min_score is not None
+                and similarity < min_score
+            ):
+                continue
 
             results.append({
                 "id": memory[0],

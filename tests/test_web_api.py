@@ -7,7 +7,14 @@ from web.app import create_app
 class FakeRetrievalService:
     """Small test replacement for semantic retrieval."""
 
-    def search(self, query, limit=5):
+    def search(
+        self,
+        query,
+        limit=5,
+        min_score=None,
+    ):
+        self.last_min_score = min_score
+
         return [
             {
                 "id": 1,
@@ -469,6 +476,11 @@ class WebApiTests(unittest.TestCase):
         self.assertAlmostEqual(
             results[0]["score"],
             0.91,
+        )
+
+        self.assertEqual(
+            self.retrieval_service.last_min_score,
+            0.15,
         )
 
 

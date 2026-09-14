@@ -293,6 +293,7 @@ def create_app(
         results = retrieval_service.search(
             query,
             limit=5,
+            min_score=0.15,
         )
 
         return jsonify(results)

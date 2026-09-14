@@ -128,6 +128,30 @@ def create_app(
 
         return jsonify(result)
 
+    @app.route("/api/memories/history")
+    def memory_history():
+        rows = database.get_superseded_memories()
+
+        result = []
+
+        for row in rows:
+            result.append(
+                {
+                    "id": row[0],
+                    "category": row[1],
+                    "title": row[2],
+                    "content": row[3],
+                    "date": row[4],
+                    "time": row[5],
+                    "notification": bool(row[6]),
+                    "status": row[9],
+                    "seen_count": row[12],
+                    "supersedes_id": row[13],
+                }
+            )
+
+        return jsonify(result)
+
     @app.route("/api/memories", methods=["DELETE"])
     def clear_memories():
         database.delete_all_memories()

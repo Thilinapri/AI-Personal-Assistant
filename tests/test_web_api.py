@@ -259,6 +259,51 @@ class WebApiTests(unittest.TestCase):
             old_memory_id,
         )
 
+    def test_memory_history_endpoint_returns_superseded_memories(self):
+        old_memory_id = self.create_test_memory(
+            title="Original appointment"
+        )
+
+        updated_memory = {
+            "category": "Task",
+            "title": "Updated appointment",
+            "content": "Updated appointment details.",
+            "date": "2099-01-01",
+            "time": "11:00",
+            "notification": False,
+        }
+
+        self.database.replace_memory(
+            old_memory_id,
+            updated_memory,
+        )
+
+        response = self.client.get(
+            "/api/memories/history"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        memories = response.get_json()
+
+        self.assertEqual(
+            len(memories),
+            1,
+        )
+
+        self.assertEqual(
+            memories[0]["id"],
+            old_memory_id,
+        )
+
+        self.assertEqual(
+            memories[0]["status"],
+            "superseded",
+        )
+
     def test_reminders_endpoint(self):
         memory_id = self.create_test_memory(
             title="API reminder"

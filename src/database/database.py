@@ -395,6 +395,36 @@ class Database:
 
             return cursor.fetchall()
 
+    def get_superseded_memories(self):
+        """Return memories that have been replaced by newer information."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    id,
+                    category,
+                    title,
+                    content,
+                    date,
+                    time,
+                    notification,
+                    processed,
+                    created_at,
+                    status,
+                    updated_at,
+                    last_seen_at,
+                    seen_count,
+                    supersedes_id,
+                    embedding,
+                    embedding_model
+                FROM memories
+                WHERE status = 'superseded'
+                ORDER BY id DESC
+            """)
+
+            return cursor.fetchall()
+
     def increment_seen(self, memory_id):
         """Record that an existing memory was observed again."""
 

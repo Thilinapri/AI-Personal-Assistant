@@ -138,3 +138,21 @@ section {
     border-radius: 8px;
     cursor: pointer;
 }
+
+.reminder-status-pending {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+
+.reminder-status-triggered {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+    color: #065f46;
+}
+
+.reminder-status-cancelled {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #4b5563;
+}

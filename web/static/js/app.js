@@ -554,12 +554,23 @@ async function loadReminders() {
                 )
             );
 
-            card.appendChild(
-                createDetailRow(
-                    "Status",
-                    reminder.status
-                )
-            );
+            const statusBadges =
+                document.createElement("div");
+
+            statusBadges.className =
+                "lifecycle-badges";
+
+            const statusBadge =
+                document.createElement("span");
+
+            statusBadge.className =
+                `lifecycle-badge reminder-status-${reminder.status}`;
+
+            statusBadge.textContent =
+                reminder.status.toUpperCase();
+
+            statusBadges.appendChild(statusBadge);
+            card.appendChild(statusBadges);
 
             if (reminder.status === "pending") {
 

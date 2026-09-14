@@ -47,6 +47,23 @@ section {
     background: #fafafa;
 }
 
+.lifecycle-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.lifecycle-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f3f4f6;
+}
+
 .memory-card h3 {
     margin-top: 0;
 }

@@ -190,6 +190,59 @@ async function loadMemories() {
 
             card.className = "memory-card";
 
+            const lifecycleBadges =
+                document.createElement("div");
+
+            lifecycleBadges.className =
+                "lifecycle-badges";
+
+            const activeBadge =
+                document.createElement("span");
+
+            activeBadge.className =
+                "lifecycle-badge";
+
+            activeBadge.textContent =
+                "ACTIVE";
+
+            lifecycleBadges.appendChild(
+                activeBadge
+            );
+
+            if (memory.supersedes_id !== null) {
+                const updatedBadge =
+                    document.createElement("span");
+
+                updatedBadge.className =
+                    "lifecycle-badge";
+
+                updatedBadge.textContent =
+                    "UPDATED";
+
+                lifecycleBadges.appendChild(
+                    updatedBadge
+                );
+            }
+
+            if (memory.seen_count > 1) {
+                const duplicateBadge =
+                    document.createElement("span");
+
+                duplicateBadge.className =
+                    "lifecycle-badge";
+
+                duplicateBadge.textContent =
+                    `DUPLICATE SEEN ×${memory.seen_count}`;
+
+                lifecycleBadges.appendChild(
+                    duplicateBadge
+                );
+            }
+
+            card.appendChild(
+                lifecycleBadges
+            );
+
             const title =
                 document.createElement("h3");
 

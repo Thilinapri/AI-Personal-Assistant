@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, request
 
+from src.config import MEMORY_SEARCH_MIN_SCORE
 from src.database.database import Database
 from src.memory.embedding_service import EmbeddingService
 from src.memory.memory_manager import MemoryManager
@@ -293,7 +294,7 @@ def create_app(
         results = retrieval_service.search(
             query,
             limit=5,
-            min_score=0.15,
+            min_score=MEMORY_SEARCH_MIN_SCORE,
         )
 
         return jsonify(results)

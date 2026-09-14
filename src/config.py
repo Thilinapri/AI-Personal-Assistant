@@ -35,3 +35,9 @@ ENABLE_SEMANTIC_PRIVACY = True
 # Optional local NER remains disabled until Raspberry Pi
 # memory and latency benchmarking proves sufficient headroom.
 ENABLE_LOCAL_NER = False
+
+# ===========================
+# Memory Retrieval
+# ===========================
+
+MEMORY_SEARCH_MIN_SCORE = 0.15

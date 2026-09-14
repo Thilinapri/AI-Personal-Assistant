@@ -354,6 +354,46 @@ class WebApiTests(unittest.TestCase):
             "pending",
         )
 
+    def test_cancel_reminder_endpoint(self):
+
+        memory_id = self.create_test_memory(
+            title="Cancel reminder test"
+        )
+
+        reminder_id = self.database.create_reminder(
+            memory_id,
+            "2099-01-01 09:30:00",
+        )
+
+        response = self.client.post(
+            f"/api/reminders/{reminder_id}/cancel"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        reminders = (
+            self.database.get_all_reminders()
+        )
+
+        self.assertEqual(
+            len(reminders),
+            1,
+        )
+
+        self.assertEqual(
+            reminders[0][3],
+            "cancelled",
+        )
+
+        self.assertIsNotNone(
+            self.database.get_memory(
+                memory_id
+            )
+        )
+
     def test_delete_memory_endpoint(self):
         memory_id = self.create_test_memory(
             title="Delete test"

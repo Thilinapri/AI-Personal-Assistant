@@ -543,6 +543,22 @@ class Database:
                       AND status = 'pending'
                 """, (memory_id,))
 
+    def cancel_reminder(self, reminder_id):
+        """Cancel one pending reminder by ID."""
+
+        with self.lock:
+
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    UPDATE reminders
+                    SET status = 'cancelled'
+                    WHERE id = ?
+                      AND status = 'pending'
+                """, (reminder_id,))
+
+                return cursor.rowcount > 0
+
     def mark_reminder_triggered(
         self,
         reminder_id,

@@ -284,6 +284,31 @@ def create_app(
 
         return jsonify(result)
 
+    @app.route(
+        "/api/reminders/<int:reminder_id>/cancel",
+        methods=["POST"],
+    )
+    def cancel_reminder(reminder_id):
+
+        cancelled = database.cancel_reminder(
+            reminder_id
+        )
+
+        if not cancelled:
+            return jsonify(
+                {
+                    "error":
+                        "Pending reminder not found."
+                }
+            ), 404
+
+        return jsonify(
+            {
+                "success": True,
+                "reminder_id": reminder_id,
+            }
+        )
+
     @app.route("/api/memories/search")
     def search_memories():
         query = request.args.get("q", "").strip()

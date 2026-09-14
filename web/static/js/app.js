@@ -561,6 +561,32 @@ async function loadReminders() {
                 )
             );
 
+            if (reminder.status === "pending") {
+
+                const actions =
+                    document.createElement("div");
+
+                actions.className =
+                    "memory-actions";
+
+                const cancelButton =
+                    document.createElement("button");
+
+                cancelButton.className =
+                    "delete-memory-button";
+
+                cancelButton.textContent =
+                    "Cancel Reminder";
+
+                cancelButton.addEventListener(
+                    "click",
+                    () => cancelReminder(reminder.id)
+                );
+
+                actions.appendChild(cancelButton);
+                card.appendChild(actions);
+            }
+
             reminderList.appendChild(card);
         });
 
@@ -574,6 +600,51 @@ async function loadReminders() {
             "reminder-list"
         ).textContent =
             "Failed to load reminders.";
+    }
+}
+
+
+async function cancelReminder(reminderId) {
+
+    const confirmed = confirm(
+        "Cancel this reminder?"
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/api/reminders/${reminderId}/cancel`,
+            {
+                method: "POST",
+            }
+        );
+
+        if (!response.ok) {
+
+            const errorData =
+                await response.json();
+
+            throw new Error(
+                errorData.error
+                || "Reminder cancellation failed"
+            );
+        }
+
+        await loadReminders();
+
+    } catch (error) {
+
+        console.error(
+            "Reminder cancellation failed:",
+            error
+        );
+
+        alert(
+            `Failed to cancel reminder: ${error.message}`
+        );
     }
 }
 

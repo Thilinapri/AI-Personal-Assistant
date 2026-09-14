@@ -156,3 +156,35 @@ section {
     border-color: #d1d5db;
     color: #4b5563;
 }
+
+.dashboard > h1 {
+    margin-bottom: 4px;
+    font-size: 32px;
+}
+
+.dashboard > h1 + p {
+    margin-top: 0;
+    margin-bottom: 28px;
+    color: #6b7280;
+}
+
+section {
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+section h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.memory-card {
+    transition:
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
+}
+
+.memory-card:hover {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+}

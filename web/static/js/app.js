@@ -268,6 +268,15 @@ async function loadMemories() {
                 )
             );
 
+            if (memory.supersedes_id !== null) {
+                card.appendChild(
+                    createDetailRow(
+                        "Relationship",
+                        `Updated previous memory #${memory.supersedes_id}`
+                    )
+                );
+            }
+
             const actions =
                 document.createElement("div");
 

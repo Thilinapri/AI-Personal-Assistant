@@ -122,6 +122,7 @@ def create_app(
                     "notification": bool(row[6]),
                     "status": row[9],
                     "seen_count": row[12],
+                    "supersedes_id": row[13],
                 }
             )
 

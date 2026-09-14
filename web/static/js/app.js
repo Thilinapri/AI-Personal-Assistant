@@ -140,6 +140,7 @@ async function clearAllMemories() {
         }
 
         await loadMemories();
+        await loadMemoryHistory();
         await loadReminders();
 
         const resultsContainer =
@@ -347,6 +348,120 @@ async function loadMemories() {
     } catch (error) {
         console.error(
             "Memory loading failed:",
+            error
+        );
+    }
+}
+
+
+async function loadMemoryHistory() {
+    try {
+        const response = await fetch(
+            "/api/memories/history"
+        );
+
+        const memories = await response.json();
+
+        const historyList =
+            document.getElementById(
+                "memory-history-list"
+            );
+
+        historyList.replaceChildren();
+
+        if (memories.length === 0) {
+            historyList.textContent =
+                "No superseded memories yet.";
+
+            return;
+        }
+
+        memories.forEach((memory) => {
+            const card =
+                document.createElement("div");
+
+            card.className =
+                "memory-card";
+
+            const lifecycleBadges =
+                document.createElement("div");
+
+            lifecycleBadges.className =
+                "lifecycle-badges";
+
+            const supersededBadge =
+                document.createElement("span");
+
+            supersededBadge.className =
+                "lifecycle-badge";
+
+            supersededBadge.textContent =
+                "SUPERSEDED";
+
+            lifecycleBadges.appendChild(
+                supersededBadge
+            );
+
+            card.appendChild(
+                lifecycleBadges
+            );
+
+            const title =
+                document.createElement("h3");
+
+            title.textContent =
+                memory.title;
+
+            const content =
+                document.createElement("p");
+
+            content.textContent =
+                memory.content;
+
+            card.appendChild(title);
+            card.appendChild(content);
+
+            card.appendChild(
+                createDetailRow(
+                    "Category",
+                    memory.category
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Date",
+                    memory.date || "-"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Time",
+                    memory.time || "-"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Status",
+                    memory.status
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Seen",
+                    `${memory.seen_count} time(s)`
+                )
+            );
+
+            historyList.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error(
+            "Failed to load memory history:",
             error
         );
     }
@@ -673,6 +788,7 @@ async function saveMemoryEdit(
         }
 
         await loadMemories();
+        await loadMemoryHistory();
         await loadReminders();
 
         const searchResults =
@@ -719,6 +835,7 @@ async function deleteMemory(memoryId) {
         }
 
         loadMemories();
+        loadMemoryHistory();
         loadReminders();
 
     } catch (error) {
@@ -850,6 +967,7 @@ document
 
 loadStatus();
 loadMemories();
+loadMemoryHistory();
 loadReminders();
 
 // Keep dashboard status and reminders up to date.

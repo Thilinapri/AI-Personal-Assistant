@@ -10,11 +10,7 @@ import {
   AlertTriangle,
   Calendar,
   Clock,
-  Info,
-  Terminal,
   FileQuestion,
-  Tag,
-  Percent,
 } from "lucide-react";
 
 export default function SearchPage() {
@@ -63,16 +59,14 @@ export default function SearchPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Semantic Search"
-        description="Natural-language memory recall powered by vector embeddings and cosine similarity."
+        title="Find a Memory"
+        description="Ask EchoMind about something you previously mentioned."
         badge={
           loading
             ? "Searching..."
-            : hasSearched
-            ? isAvailable
-              ? `${results.length} Match${results.length === 1 ? "" : "es"}`
-              : "Backend Offline"
-            : "Semantic Retrieval"
+            : hasSearched && isAvailable
+            ? `${results.length} Result${results.length === 1 ? "" : "s"}`
+            : undefined
         }
       />
 
@@ -87,7 +81,7 @@ export default function SearchPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask a question or enter a concept (e.g. 'What reminder test do I have?')..."
+              placeholder="What do I have planned for Monday?"
               className="block w-full rounded-lg border border-slate-300 bg-white py-3 pr-24 pl-11 text-sm text-slate-900 placeholder-slate-400 shadow-xs focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
             <div className="absolute inset-y-1.5 right-1.5 flex items-center">
@@ -103,39 +97,29 @@ export default function SearchPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-            <span>Press <kbd className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">Enter</kbd> to execute natural-language search</span>
-            <span className="text-[11px] text-slate-400">Queries are evaluated against semantic embeddings</span>
+            <span>
+              Type naturally &mdash; press{" "}
+              <kbd className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                Enter
+              </kbd>{" "}
+              or click Search
+            </span>
           </div>
         </form>
       </Card>
 
-      {/* Backend Unavailable State */}
+      {/* Friendly Backend Unavailable State */}
       {!loading && !isAvailable && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5 text-rose-900 shadow-xs">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-5 text-amber-950 shadow-xs">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <div>
-                <h3 className="text-sm font-semibold text-rose-950">
-                  Flask REST Backend Unavailable
-                </h3>
-                <p className="mt-0.5 text-xs text-rose-800 leading-relaxed">
-                  The Next.js API proxy cannot reach the EchoMind Flask API for semantic retrieval.
-                </p>
-                {response?.error && (
-                  <p className="mt-1 font-mono text-[11px] text-rose-700 bg-rose-100/70 px-2 py-1 rounded inline-block">
-                    Error: {response.error}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 rounded-lg bg-rose-100/60 p-2.5 text-xs text-rose-900">
-                <Terminal className="h-4 w-4 text-rose-700 shrink-0" />
-                <span>To start the backend, run:</span>
-                <code className="font-mono font-semibold text-rose-950 bg-white/80 px-1.5 py-0.5 rounded border border-rose-200">
-                  python -m web.app
-                </code>
-              </div>
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <h3 className="text-sm font-semibold text-amber-950">
+                EchoMind is currently unavailable.
+              </h3>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Please check back in a moment or try again later.
+              </p>
             </div>
           </div>
         </div>
@@ -171,10 +155,10 @@ export default function SearchPage() {
             <Search className="h-6 w-6" />
           </div>
           <h3 className="mt-3 text-base font-semibold text-slate-900">
-            Semantic Memory Recall
+            Ask EchoMind anything about your saved memories.
           </h3>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            Type any question, topic, or conversational fragment into the box above. EchoMind calculates cosine similarity between your query vector and stored memory embeddings.
+            Search for people, appointments, tasks, or anything you previously mentioned.
           </p>
         </div>
       )}
@@ -186,15 +170,15 @@ export default function SearchPage() {
             <FileQuestion className="h-6 w-6" />
           </div>
           <h3 className="mt-3 text-base font-semibold text-slate-900">
-            No Semantically Matching Memories Found
+            No memories found
           </h3>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
             {submittedQuery ? (
               <>
-                No active memories matched your query &ldquo;<span className="font-medium text-slate-700">{submittedQuery}</span>&rdquo; above the backend similarity threshold.
+                EchoMind could not find any memories matching &ldquo;<span className="font-medium text-slate-700">{submittedQuery}</span>&rdquo;. Try searching with different words.
               </>
             ) : (
-              "Please enter a search query to retrieve relevant memories."
+              "Please enter a search query to find memories."
             )}
           </p>
         </div>
@@ -203,16 +187,12 @@ export default function SearchPage() {
       {/* Successful Results State */}
       {!loading && isAvailable && hasSearched && results.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-            <span>
-              Found <strong className="text-slate-800">{results.length}</strong> matching memor{results.length === 1 ? "y" : "ies"} for &ldquo;<span className="text-slate-700">{submittedQuery}</span>&rdquo;
-            </span>
-            <span className="text-slate-400">Ranked by similarity score</span>
+          <div className="text-xs text-slate-500 px-1">
+            Found <strong className="text-slate-800">{results.length}</strong> relevant memor{results.length === 1 ? "y" : "ies"} for &ldquo;<span className="text-slate-700">{submittedQuery}</span>&rdquo;
           </div>
 
           <div className="space-y-4">
             {results.map((result) => {
-              // Convert numeric similarity score (e.g. 0.555) to user-friendly percentage (e.g. 56% match)
               const scorePercent = typeof result.score === "number"
                 ? Math.round(result.score * 100)
                 : null;
@@ -220,13 +200,13 @@ export default function SearchPage() {
               return (
                 <div
                   key={result.id}
-                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-200 hover:shadow-sm"
+                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-200 hover:shadow-xs"
                 >
-                  {/* Card Header: Category, Title & Relevance Score */}
+                  {/* Card Header */}
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-200">
+                        <span className="rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
                           {result.category || "General"}
                         </span>
                         <h2 className="text-base font-semibold text-slate-900">
@@ -235,17 +215,11 @@ export default function SearchPage() {
                       </div>
                     </div>
 
-                    {/* Numeric Similarity Score displayed as user-friendly percentage */}
+                    {/* Friendly match percentage (no raw scores) */}
                     {scorePercent !== null && (
-                      <div
-                        className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-600/20"
-                        title={`Cosine similarity score: ${result.score.toFixed(4)}`}
-                      >
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-600/20">
                         <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
                         <span>{scorePercent}% match</span>
-                        <span className="text-[10px] text-indigo-400 font-mono">
-                          ({result.score.toFixed(3)})
-                        </span>
                       </div>
                     )}
                   </div>
@@ -268,10 +242,6 @@ export default function SearchPage() {
                         <span>{result.time && result.time.trim() ? result.time : "No time set"}</span>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                      <span className="font-mono">ID #{result.id}</span>
-                    </div>
                   </div>
                 </div>
               );
@@ -279,21 +249,6 @@ export default function SearchPage() {
           </div>
         </div>
       )}
-
-      {/* Semantic Retrieval System Note */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-xs text-indigo-900 shadow-xs">
-        <div className="flex items-start gap-2.5">
-          <Info className="h-4 w-4 shrink-0 text-indigo-600 mt-0.5" />
-          <div className="space-y-1">
-            <span className="font-semibold text-indigo-950">
-              EchoMind Semantic Retrieval Engine
-            </span>
-            <p className="text-indigo-800 leading-relaxed text-[11px] sm:text-xs">
-              Results are retrieved using EchoMind semantic vector embeddings and cosine similarity. The Flask backend compares your natural-language query against stored memory embeddings and returns only active memories meeting the pre-configured similarity threshold.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

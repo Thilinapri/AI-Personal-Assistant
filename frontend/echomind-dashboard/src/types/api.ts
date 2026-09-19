@@ -82,4 +82,4 @@ export interface ApiCancelReminderResponse {
   error?: string;
 }
 
-export type ReminderStatusFilter = "All" | "Pending" | "Triggered" | "Cancelled";
+export type ReminderStatusFilter = "All" | "Pending" | "Notified" | "Cancelled";

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Menu, Activity, Cpu } from "lucide-react";
+import { Menu, Sparkles } from "lucide-react";
 
 interface HeaderProps {
   onMenuToggle?: () => void;
@@ -14,7 +14,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
         <button
           type="button"
           onClick={onMenuToggle}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:hidden cursor-pointer"
           aria-label="Toggle navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -25,28 +25,17 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             <span className="text-xl font-bold tracking-tight text-slate-900">
               EchoMind
             </span>
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
-              Frontend v2
-            </span>
           </div>
           <span className="text-xs font-medium text-slate-500">
-            AI Personal Memory Assistant
+            Your Personal Memory Assistant
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 sm:flex">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-          </span>
-          Decoupled Next.js Shell
-        </div>
-
-        <div className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-mono text-slate-600 md:flex">
-          <Cpu className="h-3.5 w-3.5 text-slate-500" />
-          <span>Flask REST Target</span>
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 font-medium text-slate-600">
+          <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+          <span>Personal Assistant</span>
         </div>
       </div>
     </header>

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Card } from "@/components/common/Card";
 import {
   ApiCancelReminderResponse,
   ApiRemindersResponse,
@@ -13,17 +12,13 @@ import {
   Bell,
   RefreshCw,
   AlertTriangle,
-  Calendar,
   Clock,
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Terminal,
   FileQuestion,
   Tag,
   Loader2,
-  Trash2,
-  HelpCircle,
   Check,
   X,
 } from "lucide-react";
@@ -31,7 +26,7 @@ import {
 const STATUS_FILTERS: ReminderStatusFilter[] = [
   "All",
   "Pending",
-  "Triggered",
+  "Notified",
   "Cancelled",
 ];
 
@@ -73,11 +68,17 @@ export default function RemindersPage() {
   // Compute status counts for filter pills
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { All: allReminders.length };
-    for (const st of ["Pending", "Triggered", "Cancelled"] as const) {
-      counts[st] = allReminders.filter(
-        (r) => r.status.trim().toLowerCase() === st.toLowerCase()
-      ).length;
-    }
+    counts["Pending"] = allReminders.filter(
+      (r) => r.status.trim().toLowerCase() === "pending"
+    ).length;
+    counts["Notified"] = allReminders.filter(
+      (r) =>
+        r.status.trim().toLowerCase() === "triggered" ||
+        r.status.trim().toLowerCase() === "notified"
+    ).length;
+    counts["Cancelled"] = allReminders.filter(
+      (r) => r.status.trim().toLowerCase() === "cancelled"
+    ).length;
     return counts;
   }, [allReminders]);
 
@@ -86,9 +87,13 @@ export default function RemindersPage() {
     let list = [...allReminders];
 
     if (selectedStatus !== "All") {
-      list = list.filter(
-        (r) => r.status.trim().toLowerCase() === selectedStatus.toLowerCase()
-      );
+      list = list.filter((r) => {
+        const norm = r.status.trim().toLowerCase();
+        if (selectedStatus === "Pending") return norm === "pending";
+        if (selectedStatus === "Notified") return norm === "triggered" || norm === "notified";
+        if (selectedStatus === "Cancelled") return norm === "cancelled";
+        return true;
+      });
     }
 
     // Sort: Pending reminders by reminder_time ascending (earliest first)
@@ -106,9 +111,9 @@ export default function RemindersPage() {
         return aPending ? -1 : 1;
       }
 
-      // Otherwise sort by created_at or reminder_time descending (newest first)
-      return (b.created_at || b.reminder_time || "").localeCompare(
-        a.created_at || a.reminder_time || ""
+      // Otherwise sort by reminder_time descending (newest first)
+      return (b.reminder_time || b.created_at || "").localeCompare(
+        a.reminder_time || a.created_at || ""
       );
     });
 
@@ -131,7 +136,7 @@ export default function RemindersPage() {
       if (data.available === false) {
         setFeedback({
           type: "error",
-          text: `Backend unavailable: ${data.error || "Could not reach Flask API"}`,
+          text: "EchoMind is currently unavailable. Please try again.",
         });
       } else if (data.success === false) {
         const errorMsg =
@@ -143,20 +148,18 @@ export default function RemindersPage() {
           type: "error",
           text: errorMsg,
         });
-        // Refresh to sync latest state
         await fetchReminders();
       } else {
         setFeedback({
           type: "success",
-          text: `Reminder #${id} was successfully cancelled.`,
+          text: "Reminder was successfully cancelled.",
         });
-        // Refresh to update reminder list with cancelled state
         await fetchReminders();
       }
     } catch (err: unknown) {
       setFeedback({
         type: "error",
-        text: err instanceof Error ? err.message : "Cancellation request failed",
+        text: err instanceof Error ? err.message : "Cancellation request failed.",
       });
     } finally {
       setCancellingId(null);
@@ -180,13 +183,13 @@ export default function RemindersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reminders"
-        description="Automated temporal reminders managed by the EchoMind Reminder Manager."
+        description="Your upcoming and previous reminders."
         badge={
           loading
             ? "Loading..."
             : isAvailable
-            ? `${allReminders.length} Total Reminder${allReminders.length === 1 ? "" : "s"}`
-            : "Backend Offline"
+            ? `${allReminders.length} Reminder${allReminders.length === 1 ? "" : "s"}`
+            : undefined
         }
         actions={
           <button
@@ -205,39 +208,24 @@ export default function RemindersPage() {
         }
       />
 
-      {/* Backend Unavailable Alert */}
+      {/* Friendly Backend Unavailable Alert */}
       {!loading && !isAvailable && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5 text-rose-900 shadow-xs">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-5 text-amber-950 shadow-xs">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <div>
-                <h3 className="text-sm font-semibold text-rose-950">
-                  Flask REST Backend Unavailable
-                </h3>
-                <p className="mt-0.5 text-xs text-rose-800 leading-relaxed">
-                  The Next.js API proxy cannot connect to the EchoMind Flask API to load reminders.
-                </p>
-                {response?.error && (
-                  <p className="mt-1 font-mono text-[11px] text-rose-700 bg-rose-100/70 px-2 py-1 rounded inline-block">
-                    Error: {response.error}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 rounded-lg bg-rose-100/60 p-2.5 text-xs text-rose-900">
-                <Terminal className="h-4 w-4 text-rose-700 shrink-0" />
-                <span>To start the backend, run:</span>
-                <code className="font-mono font-semibold text-rose-950 bg-white/80 px-1.5 py-0.5 rounded border border-rose-200">
-                  python -m web.app
-                </code>
-              </div>
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <h3 className="text-sm font-semibold text-amber-950">
+                EchoMind is currently unavailable.
+              </h3>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Please check back in a moment or click Refresh to try again.
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Operation Feedback Banner (Cancellation Success or Error) */}
+      {/* Operation Feedback Banner */}
       {feedback && (
         <div
           className={`flex items-start justify-between gap-3 rounded-xl border p-4 text-xs shadow-xs ${
@@ -336,7 +324,7 @@ export default function RemindersPage() {
                 No Reminders Found
               </h3>
               <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-                No reminders are currently registered in the database. When ambient speech or memory events produce commitments, they will be scheduled here.
+                You don&apos;t have any reminders set right now. When you mention things you need to be reminded of, EchoMind will keep track of them here.
               </p>
             </div>
           ) : filteredAndSortedReminders.length === 0 ? (
@@ -365,7 +353,7 @@ export default function RemindersPage() {
               {filteredAndSortedReminders.map((reminder) => {
                 const normStatus = reminder.status.trim().toLowerCase();
                 const isPending = normStatus === "pending";
-                const isTriggered = normStatus === "triggered";
+                const isNotified = normStatus === "triggered" || normStatus === "notified";
                 const isCancelled = normStatus === "cancelled";
                 const isOverdue = isPending && isPastTime(reminder.reminder_time);
                 const isCancelling = cancellingId === reminder.id;
@@ -379,14 +367,9 @@ export default function RemindersPage() {
                     {/* Header: Title & Status Badge */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-base font-semibold text-slate-900">
-                            {reminder.title}
-                          </h2>
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-mono text-slate-600 border border-slate-200">
-                            Memory #{reminder.memory_id}
-                          </span>
-                        </div>
+                        <h2 className="text-base font-semibold text-slate-900">
+                          {reminder.title}
+                        </h2>
                       </div>
 
                       {/* Distinct Visual Status Badges */}
@@ -398,10 +381,10 @@ export default function RemindersPage() {
                           </span>
                         )}
 
-                        {isTriggered && (
+                        {isNotified && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
                             <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                            TRIGGERED
+                            NOTIFIED
                           </span>
                         )}
 
@@ -431,7 +414,7 @@ export default function RemindersPage() {
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-slate-400" />
                           <span>
-                            Reminder Time:{" "}
+                            {isNotified ? "Scheduled for:" : "Remind at:"}{" "}
                             <strong className="text-slate-700 font-medium">
                               {reminder.reminder_time || "Not scheduled"}
                             </strong>
@@ -441,14 +424,7 @@ export default function RemindersPage() {
                         {reminder.triggered_at && (
                           <div className="flex items-center gap-1.5 text-emerald-700">
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>Triggered: {reminder.triggered_at}</span>
-                          </div>
-                        )}
-
-                        {reminder.created_at && (
-                          <div className="flex items-center gap-1 text-slate-400">
-                            <Calendar className="h-3 w-3" />
-                            <span>Created: {reminder.created_at}</span>
+                            <span>Notified: {reminder.triggered_at}</span>
                           </div>
                         )}
                       </div>
@@ -460,7 +436,7 @@ export default function RemindersPage() {
                             /* Inline Confirmation */
                             <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 p-1.5">
                               <span className="text-[11px] font-semibold text-rose-900">
-                                Confirm cancel?
+                                Cancel reminder?
                               </span>
                               <button
                                 type="button"

@@ -14,11 +14,7 @@ import {
   BellOff,
   Tag,
   Repeat,
-  Sparkles,
-  Layers,
-  Terminal,
   FileQuestion,
-  History,
 } from "lucide-react";
 
 const CATEGORIES: MemoryCategory[] = [
@@ -35,7 +31,6 @@ export default function MemoriesPage() {
   const [response, setResponse] = useState<ApiMemoriesResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedCategory, setSelectedCategory] = useState<MemoryCategory>("All");
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   const fetchMemories = useCallback(async () => {
     setLoading(true);
@@ -43,13 +38,11 @@ export default function MemoriesPage() {
       const res = await fetch("/api/memories", { cache: "no-store" });
       const data: ApiMemoriesResponse = await res.json();
       setResponse(data);
-      setLastRefreshed(new Date());
     } catch (err: unknown) {
       setResponse({
         available: false,
         error: err instanceof Error ? err.message : "Failed to load memories",
       });
-      setLastRefreshed(new Date());
     } finally {
       setLoading(false);
     }
@@ -90,13 +83,13 @@ export default function MemoriesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Memories"
-        description="Active episodic memories consolidated by the EchoMind Memory Manager."
+        description="Important things EchoMind remembers for you."
         badge={
           loading
             ? "Loading..."
             : isAvailable
-            ? `${allMemories.length} Active Memory${allMemories.length === 1 ? "" : "ies"}`
-            : "Backend Offline"
+            ? `${allMemories.length} Saved`
+            : undefined
         }
         actions={
           <button
@@ -115,39 +108,24 @@ export default function MemoriesPage() {
         }
       />
 
-      {/* Backend Unavailable Alert */}
+      {/* Friendly Backend Unavailable Alert */}
       {!loading && !isAvailable && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:p-5 text-rose-900 shadow-xs">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-5 text-amber-950 shadow-xs">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <div>
-                <h3 className="text-sm font-semibold text-rose-950">
-                  Flask REST Backend Unavailable
-                </h3>
-                <p className="mt-0.5 text-xs text-rose-800 leading-relaxed">
-                  The Next.js API proxy cannot connect to the EchoMind Flask API to retrieve active memories.
-                </p>
-                {response?.error && (
-                  <p className="mt-1 font-mono text-[11px] text-rose-700 bg-rose-100/70 px-2 py-1 rounded inline-block">
-                    Error: {response.error}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 rounded-lg bg-rose-100/60 p-2.5 text-xs text-rose-900">
-                <Terminal className="h-4 w-4 text-rose-700 shrink-0" />
-                <span>To start the backend, run:</span>
-                <code className="font-mono font-semibold text-rose-950 bg-white/80 px-1.5 py-0.5 rounded border border-rose-200">
-                  python -m web.app
-                </code>
-              </div>
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <h3 className="text-sm font-semibold text-amber-950">
+                EchoMind is currently unavailable.
+              </h3>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Please check back in a moment or click Refresh to try again.
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Category Filter Pills (rendered whenever available) */}
+      {/* Category Filter Pills */}
       {isAvailable && (
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-4">
           <span className="text-xs font-medium text-slate-500 mr-1 flex items-center gap-1">
@@ -216,10 +194,10 @@ export default function MemoriesPage() {
                 <Brain className="h-6 w-6" />
               </div>
               <h3 className="mt-3 text-base font-semibold text-slate-900">
-                No Memories Stored Yet
+                No Memories Saved Yet
               </h3>
               <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-                EchoMind has not captured or consolidated any active memories in the database yet. When conversations or reminders are ingested, they will appear here.
+                EchoMind hasn&apos;t saved any memories yet. As you talk with your assistant, important notes and commitments will appear here.
               </p>
             </div>
           ) : filteredMemories.length === 0 ? (
@@ -232,18 +210,18 @@ export default function MemoriesPage() {
                 No Memories in &ldquo;{selectedCategory}&rdquo;
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                There are currently no active memories categorized as {selectedCategory}.
+                You don&apos;t have any memories saved under {selectedCategory} yet.
               </p>
               <button
                 type="button"
                 onClick={() => setSelectedCategory("All")}
                 className="mt-3 inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
               >
-                View all categories ({allMemories.length})
+                View all memories ({allMemories.length})
               </button>
             </div>
           ) : (
-            /* Active Memory Cards */
+            /* Memory Cards */
             <div className="space-y-4">
               {filteredMemories.map((memory) => {
                 const hasSupersedes = memory.supersedes_id !== null && memory.supersedes_id !== undefined;
@@ -252,13 +230,13 @@ export default function MemoriesPage() {
                 return (
                   <div
                     key={memory.id}
-                    className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-200 hover:shadow-sm"
+                    className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-200 hover:shadow-xs"
                   >
                     {/* Header Row: Title, Category & Badges */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-200">
+                          <span className="rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
                             {memory.category || "General"}
                           </span>
                           <h2 className="text-base font-semibold text-slate-900">
@@ -267,24 +245,17 @@ export default function MemoriesPage() {
                         </div>
                       </div>
 
-                      {/* Lifecycle Badges */}
+                      {/* Friendly Lifecycle Badges */}
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {/* ACTIVE: shown for all active memories */}
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                          ACTIVE
-                        </span>
-
-                        {/* UPDATED: additionally shown when memory.supersedes_id !== null */}
                         {hasSupersedes && (
                           <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-indigo-700 ring-1 ring-inset ring-indigo-600/20">
-                            UPDATED
+                            Updated
                           </span>
                         )}
 
-                        {/* DUPLICATE SEEN ×N: additionally shown when memory.seen_count > 1 */}
                         {isDuplicate && (
                           <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-amber-800 ring-1 ring-inset ring-amber-600/20">
-                            DUPLICATE SEEN &times;{memory.seen_count}
+                            Mentioned {memory.seen_count} times
                           </span>
                         )}
                       </div>
@@ -295,11 +266,11 @@ export default function MemoriesPage() {
                       {memory.content}
                     </p>
 
-                    {/* Supersedes Informational Note (non-clickable text) */}
+                    {/* Friendly Supersedes Informational Note */}
                     {hasSupersedes && (
                       <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-indigo-50/60 border border-indigo-100 px-2.5 py-1 text-xs text-indigo-900">
                         <Repeat className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                        <span>Supersedes Memory #{memory.supersedes_id}</span>
+                        <span>Updated from an earlier memory</span>
                       </div>
                     )}
 
@@ -320,21 +291,15 @@ export default function MemoriesPage() {
                           {memory.notification ? (
                             <>
                               <Bell className="h-3.5 w-3.5 text-indigo-600" />
-                              <span className="text-indigo-700 font-medium">Notification Enabled</span>
+                              <span className="text-indigo-700 font-medium">Reminder set</span>
                             </>
                           ) : (
                             <>
                               <BellOff className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Notification Disabled</span>
+                              <span>No reminder set</span>
                             </>
                           )}
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                        <span>Seen count: {memory.seen_count}</span>
-                        <span>&bull;</span>
-                        <span className="font-mono">ID #{memory.id}</span>
                       </div>
                     </div>
                   </div>

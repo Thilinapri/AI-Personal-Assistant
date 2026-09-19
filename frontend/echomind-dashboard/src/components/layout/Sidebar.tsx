@@ -9,9 +9,9 @@ import {
   Search,
   Bell,
   History,
-  ShieldCheck,
   Sparkles,
   X,
+  Bookmark,
 } from "lucide-react";
 
 interface NavItem {
@@ -23,10 +23,10 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Memories", href: "/memories", icon: Brain },
-  { name: "Search", href: "/search", icon: Search },
+  { name: "Find a Memory", href: "/search", icon: Search },
   { name: "Reminders", href: "/reminders", icon: Bell },
   { name: "Memory History", href: "/history", icon: History },
-  { name: "Privacy", href: "/privacy", icon: ShieldCheck },
+  // Privacy navigation item temporarily hidden from menu per user request
 ];
 
 interface SidebarProps {
@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 EchoMind
               </span>
               <span className="text-[11px] text-slate-400">
-                Engineering Portal
+                Your Personal Memory Assistant
               </span>
             </div>
           </div>
@@ -73,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden cursor-pointer"
             aria-label="Close sidebar"
           >
             <X className="h-5 w-5" />
@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         {/* Navigation links */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
           <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Navigation
+            Menu
           </div>
           <nav className="space-y-1">
             {navItems.map((item) => {
@@ -114,17 +114,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </nav>
         </div>
 
-        {/* University Engineering Project Footer */}
+        {/* User-friendly Footer */}
         <div className="border-t border-slate-800 p-4">
-          <div className="rounded-lg bg-slate-800/60 p-3 text-xs text-slate-400">
-            <p className="font-semibold text-slate-200">EchoMind System</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed">
-              3rd-Year Engineering Project
+          <div className="rounded-lg bg-slate-800/50 p-3 text-xs text-slate-400">
+            <p className="font-semibold text-slate-200 flex items-center gap-1.5">
+              <Bookmark className="h-3.5 w-3.5 text-indigo-400" />
+              EchoMind Assistant
             </p>
-            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
-              <span>REST Architecture Model</span>
-            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+              Remembering your important conversations, commitments, and thoughts.
+            </p>
           </div>
         </div>
       </aside>

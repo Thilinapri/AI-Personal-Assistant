@@ -28,9 +28,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </main>
 
         <footer className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6 lg:px-8">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 text-xs text-slate-500 sm:flex-row">
-            <span>EchoMind AI Personal Memory Assistant &copy; 2026</span>
-            <span>Next.js App Router Shell • University Project</span>
+          <div className="mx-auto flex max-w-6xl items-center justify-center text-xs text-slate-500">
+            <span>EchoMind &mdash; Remember what matters. &copy; 2026</span>
           </div>
         </footer>
       </div>

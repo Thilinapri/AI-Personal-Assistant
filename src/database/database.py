@@ -105,6 +105,10 @@ class Database:
         }
 
         migrations = {
+            "processed":
+                "ALTER TABLE memories "
+                "ADD COLUMN processed INTEGER DEFAULT 0",
+
             "status":
                 "ALTER TABLE memories "
                 "ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",

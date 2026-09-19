@@ -123,18 +123,33 @@ class ContinuousTranscriber:
                 # ---------------------------------
 
                 audio = self.microphone.read()
+
                 samples = audio.shape[0]
 
-                audio_buffer[
-                    position:position + samples
-                ] = audio[:, 0]
+                # Protect against unexpected audio block sizes.
+                remaining_samples = (
+                    self.chunk_samples - position
+                )
 
-                position += samples
+                samples_to_copy = min(
+                    samples,
+                    remaining_samples,
+                )
+
+                self._copy_audio_samples(
+                    audio_buffer=audio_buffer,
+                    position=position,
+                    audio=audio,
+                    samples_to_copy=samples_to_copy,
+                )
+
+                position += samples_to_copy
 
                 if position < self.chunk_samples:
                     continue
 
                 chunk = audio_buffer.copy()
+
                 position = 0
 
                 print(
@@ -155,4 +170,48 @@ class ContinuousTranscriber:
 
             print(
                 "🎧 Continuous listening stopped."
+            )
+
+    def _copy_audio_samples(
+        self,
+        audio_buffer,
+        position,
+        audio,
+        samples_to_copy,
+    ):
+        """
+        Copy microphone samples into the current audio buffer.
+
+        The microphone normally returns an array shaped like:
+        (samples, channels)
+        """
+
+        if samples_to_copy <= 0:
+            return
+
+        audio_buffer[
+            position:position + samples_to_copy
+        ] = audio[:samples_to_copy, 0]
+
+    def _enqueue_chunk(self, chunk):
+        """
+        Add a completed audio chunk to the AudioWorker queue.
+
+        This operation is non-blocking so microphone capture does not
+        freeze while Whisper is processing another audio chunk.
+        """
+
+        try:
+
+            self.audio_queue.put_nowait(chunk)
+
+            print(
+                "📤 Audio chunk added to processing queue."
+            )
+
+        except queue.Full:
+
+            print(
+                "⚠️ Audio processing queue is full. "
+                "Dropping audio chunk."
             )

@@ -30,6 +30,8 @@ export interface ApiMemoriesResponse {
   error?: string;
 }
 
+export type ApiMemoryHistoryResponse = ApiMemoriesResponse;
+
 export type MemoryCategory =
   | "All"
   | "Reminder"

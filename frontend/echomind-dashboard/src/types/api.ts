@@ -66,3 +66,18 @@ export interface Reminder {
   title: string;
   content: string;
 }
+
+export interface ApiRemindersResponse {
+  available: boolean;
+  reminders?: Reminder[];
+  error?: string;
+}
+
+export interface ApiCancelReminderResponse {
+  available: boolean;
+  success?: boolean;
+  reminder_id?: number;
+  error?: string;
+}
+
+export type ReminderStatusFilter = "All" | "Pending" | "Triggered" | "Cancelled";

@@ -39,6 +39,23 @@ export type MemoryCategory =
   | "Preference"
   | "Event";
 
+export interface MemorySearchResult {
+  id: number;
+  category: string;
+  title: string;
+  content: string;
+  date: string;
+  time: string;
+  score: number;
+}
+
+export interface ApiSearchResponse {
+  available: boolean;
+  results?: MemorySearchResult[];
+  query?: string;
+  error?: string;
+}
+
 export interface Reminder {
   id: number;
   memory_id: number;

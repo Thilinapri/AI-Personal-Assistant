@@ -1,4 +1,11 @@
-import { ApiMemoriesResponse, ApiStatusResponse, Memory, SystemStatus } from "@/types/api";
+import {
+  ApiMemoriesResponse,
+  ApiSearchResponse,
+  ApiStatusResponse,
+  Memory,
+  MemorySearchResult,
+  SystemStatus,
+} from "@/types/api";
 
 /**
  * EchoMind Flask Backend Server-Side Client.
@@ -109,6 +116,71 @@ export async function fetchBackendMemories(): Promise<ApiMemoriesResponse> {
     return {
       available: false,
       error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Search active memories semantically using Flask REST API GET /api/memories/search?q=<query>.
+ * If query is empty or whitespace only, returns empty list without calling Flask.
+ */
+export async function fetchBackendMemorySearch(
+  query: string
+): Promise<ApiSearchResponse> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return {
+      available: true,
+      results: [],
+      query: "",
+    };
+  }
+
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/memories/search?q=${encodeURIComponent(trimmed)}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+        query: trimmed,
+      };
+    }
+
+    const data = (await response.json()) as MemorySearchResult[];
+
+    return {
+      available: true,
+      results: Array.isArray(data) ? data : [],
+      query: trimmed,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+      query: trimmed,
     };
   }
 }

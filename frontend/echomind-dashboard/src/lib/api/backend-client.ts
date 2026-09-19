@@ -1,4 +1,4 @@
-import { ApiStatusResponse, SystemStatus } from "@/types/api";
+import { ApiMemoriesResponse, ApiStatusResponse, Memory, SystemStatus } from "@/types/api";
 
 /**
  * EchoMind Flask Backend Server-Side Client.
@@ -46,6 +46,57 @@ export async function fetchBackendStatus(): Promise<ApiStatusResponse> {
     return {
       available: true,
       status: data,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Fetch active memories from Flask REST API GET /api/memories.
+ * Gracefully handles offline states, timeouts, and network errors.
+ */
+export async function fetchBackendMemories(): Promise<ApiMemoriesResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/memories`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as Memory[];
+
+    return {
+      available: true,
+      memories: Array.isArray(data) ? data : [],
     };
   } catch (err: unknown) {
     const errorMessage =

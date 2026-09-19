@@ -24,6 +24,21 @@ export interface Memory {
   supersedes_id: number | null;
 }
 
+export interface ApiMemoriesResponse {
+  available: boolean;
+  memories?: Memory[];
+  error?: string;
+}
+
+export type MemoryCategory =
+  | "All"
+  | "Reminder"
+  | "Task"
+  | "Shopping"
+  | "Note"
+  | "Preference"
+  | "Event";
+
 export interface Reminder {
   id: number;
   memory_id: number;

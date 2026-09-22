@@ -16,8 +16,9 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
     - related
     - new
 
-    It intentionally avoids treating cosine similarity alone
-    as proof that a memory should be replaced.
+    Semantic retrieval already provides a strong candidate,
+    so duplicate detection should tolerate small wording
+    differences produced by the LLM.
     """
 
     UPDATE_WORDS = {
@@ -34,20 +35,40 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
 
     def classify(self, new_memory, existing_memory):
 
-        new_category = self._normalize(new_memory.get("category"))
-        old_category = self._normalize(existing_memory.get("category"))
+        new_category = self._normalize(
+            new_memory.get("category")
+        )
+        old_category = self._normalize(
+            existing_memory.get("category")
+        )
 
-        new_title = self._normalize(new_memory.get("title"))
-        old_title = self._normalize(existing_memory.get("title"))
+        new_title = self._normalize(
+            new_memory.get("title")
+        )
+        old_title = self._normalize(
+            existing_memory.get("title")
+        )
 
-        new_content = self._normalize(new_memory.get("content"))
-        old_content = self._normalize(existing_memory.get("content"))
+        new_content = self._normalize(
+            new_memory.get("content")
+        )
+        old_content = self._normalize(
+            existing_memory.get("content")
+        )
 
-        new_date = self._normalize(new_memory.get("date"))
-        old_date = self._normalize(existing_memory.get("date"))
+        new_date = self._normalize(
+            new_memory.get("date")
+        )
+        old_date = self._normalize(
+            existing_memory.get("date")
+        )
 
-        new_time = self._normalize(new_memory.get("time"))
-        old_time = self._normalize(existing_memory.get("time"))
+        new_time = self._normalize(
+            new_memory.get("time")
+        )
+        old_time = self._normalize(
+            existing_memory.get("time")
+        )
 
         title_similarity = self._text_similarity(
             new_title,
@@ -59,12 +80,29 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
             old_content,
         )
 
-        same_category = new_category == old_category
-        same_date = new_date == old_date
-        same_time = new_time == old_time
+        same_category = (
+            new_category == old_category
+        )
+
+        same_date = (
+            new_date == old_date
+        )
+
+        same_time = (
+            new_time == old_time
+        )
 
         # ---------------------------------
         # Duplicate
+        # ---------------------------------
+        #
+        # Gemini may describe the same memory
+        # using slightly different content text.
+        #
+        # If semantic retrieval already found
+        # this as a strong candidate, and the
+        # category, date, time and title match,
+        # treat it as the same memory.
         # ---------------------------------
 
         if (
@@ -72,7 +110,6 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
             and same_date
             and same_time
             and title_similarity >= 0.90
-            and content_similarity >= 0.80
         ):
             return "duplicate"
 
@@ -93,8 +130,10 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
             )
         )
 
-        update_language = self._contains_update_word(
-            new_content
+        update_language = (
+            self._contains_update_word(
+                new_content
+            )
         )
 
         if (
@@ -168,7 +207,9 @@ class RuleBasedRelationshipClassifier(RelationshipClassifier):
         text,
     ):
 
-        words = set(text.split())
+        words = set(
+            text.split()
+        )
 
         return bool(
             words.intersection(

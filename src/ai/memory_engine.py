@@ -13,21 +13,37 @@ class MemoryEngine:
     """
     Cloud-backed memory extraction engine.
 
-    All text must pass through PrivacyGateway before any
-    Gemini request is created.
+    Privacy Gateway is optional.
+
+    When privacy is enabled:
+        sentences
+        -> Context Selector inside PrivacyGateway
+        -> privacy protection
+        -> Gemini
+
+    When privacy is disabled:
+        sentences
+        -> Context Selector
+        -> Gemini
     """
 
     def __init__(
         self,
-        privacy_gateway,
+        privacy_gateway=None,
+        context_selector=None,
     ):
 
-        if privacy_gateway is None:
+        if (
+            privacy_gateway is None
+            and context_selector is None
+        ):
             raise ValueError(
-                "MemoryEngine requires a PrivacyGateway."
+                "MemoryEngine requires either a "
+                "PrivacyGateway or ContextSelector."
             )
 
         self.privacy_gateway = privacy_gateway
+        self.context_selector = context_selector
 
         load_dotenv()
 
@@ -61,9 +77,6 @@ class MemoryEngine:
                 f"Unsupported memory engine mode: {mode}"
             )
 
-        # Transcript context is passed as structured local
-        # sentence items. Do not join and split conversation
-        # context across the privacy boundary.
         sentences = [
             sentence.strip()
             for sentence in sentences
@@ -72,6 +85,11 @@ class MemoryEngine:
                 and sentence.strip()
             )
         ]
+
+        if not sentences:
+            return self._empty_result(
+                mode
+            )
 
         privacy_mode = (
             "immediate"
@@ -88,38 +106,70 @@ class MemoryEngine:
             else None
         )
 
-        try:
-            privacy_result = (
-                self.privacy_gateway.prepare(
+        # ---------------------------------
+        # Prepare Cloud Context
+        # ---------------------------------
+
+        if self.privacy_gateway is not None:
+
+            prepared = self._prepare_with_privacy(
+                sentences=sentences,
+                mode=mode,
+                privacy_mode=privacy_mode,
+                pinned_original_index=(
+                    pinned_original_index
+                ),
+            )
+
+            if prepared is None:
+                return self._empty_result(
+                    mode
+                )
+
+            cloud_text = prepared[
+                "text"
+            ]
+
+            mapping = prepared[
+                "mapping"
+            ]
+
+            privacy_enabled = True
+
+        else:
+
+            cloud_text = (
+                self._prepare_without_privacy(
                     sentences=sentences,
-                    mode=privacy_mode,
-                    purpose="memory_extraction",
+                    privacy_mode=privacy_mode,
                     pinned_original_index=(
                         pinned_original_index
                     ),
                 )
             )
 
-        except Exception:
+            if not cloud_text:
+                return self._empty_result(
+                    mode
+                )
 
-            # Privacy components fail closed.
-            # Never send raw text as a fallback.
-            return self._empty_result(
-                mode
-            )
+            mapping = {}
 
-        if not privacy_result.cloud_allowed:
-            return self._empty_result(
-                mode
-            )
+            privacy_enabled = False
 
-        # Only the sanitized minimum-disclosure capsule
-        # is allowed into the cloud prompt.
+        # ---------------------------------
+        # Build Gemini Prompt
+        # ---------------------------------
+
         prompt = self.prompt_builder.build(
             mode=mode,
-            text=privacy_result.capsule.text,
+            text=cloud_text,
             current_time=current_time,
         )
+
+        # ---------------------------------
+        # Gemini Request
+        # ---------------------------------
 
         response = (
             self.client.models.generate_content(
@@ -138,33 +188,141 @@ class MemoryEngine:
             response.text
         )
 
-        # Validate cloud-generated content before any
-        # local AMBER placeholders are restored.
+        # ---------------------------------
+        # Privacy Output Validation
+        # ---------------------------------
+
+        if privacy_enabled:
+
+            try:
+                (
+                    output_safe,
+                    _detected_types,
+                ) = (
+                    self.privacy_gateway
+                    .validate_cloud_output(
+                        result
+                    )
+                )
+
+            except Exception:
+
+                # Privacy-enabled mode must fail closed.
+                return self._empty_result(
+                    mode
+                )
+
+            if not output_safe:
+                return self._empty_result(
+                    mode
+                )
+
+            # Restore locally pseudonymized values only
+            # after the cloud response passes validation.
+            result = self._rehydrate_value(
+                result,
+                mapping,
+            )
+
+        return result
+
+    def _prepare_with_privacy(
+        self,
+        sentences,
+        mode,
+        privacy_mode,
+        pinned_original_index,
+    ):
+        """
+        Prepare context using the complete Privacy Gateway.
+
+        Privacy failures fail closed and prevent cloud access.
+        """
+
         try:
-            (
-                output_safe,
-                _detected_types,
-            ) = self.privacy_gateway.validate_cloud_output(
-                result
+            privacy_result = (
+                self.privacy_gateway.prepare(
+                    sentences=sentences,
+                    mode=privacy_mode,
+                    purpose="memory_extraction",
+                    pinned_original_index=(
+                        pinned_original_index
+                    ),
+                )
             )
 
         except Exception:
+            return None
 
-            # Output privacy validation also fails closed.
-            return self._empty_result(
-                mode
+        if not privacy_result.cloud_allowed:
+            return None
+
+        return {
+            "text": (
+                privacy_result.capsule.text
+            ),
+            "mapping": (
+                privacy_result.mapping
+            ),
+        }
+
+    def _prepare_without_privacy(
+        self,
+        sentences,
+        privacy_mode,
+        pinned_original_index,
+    ):
+        """
+        Prepare relevant context when Privacy Gateway
+        has been disabled.
+
+        Context selection remains active so EchoMind
+        still avoids sending obviously irrelevant
+        conversation to Gemini.
+        """
+
+        try:
+            selection = (
+                self.context_selector.select(
+                    sentences
+                )
             )
 
-        if not output_safe:
-            return self._empty_result(
-                mode
-            )
+        except Exception:
+            return ""
 
-        # Restore AMBER placeholders only after the
-        # cloud response has passed local output validation.
-        return self._rehydrate_value(
-            result,
-            privacy_result.mapping,
+        selected_by_index = {
+            item.original_index: item.text
+            for item in (
+                selection.selected_items
+            )
+        }
+
+        # Immediate processing must preserve the latest
+        # triggered sentence even if the relevance selector
+        # did not independently choose it.
+        if (
+            privacy_mode == "immediate"
+            and pinned_original_index is not None
+            and 0
+            <= pinned_original_index
+            < len(sentences)
+        ):
+            selected_by_index[
+                pinned_original_index
+            ] = sentences[
+                pinned_original_index
+            ]
+
+        selected_sentences = [
+            selected_by_index[index]
+            for index in sorted(
+                selected_by_index
+            )
+        ]
+
+        return "\n".join(
+            selected_sentences
         )
 
     def _rehydrate_value(
@@ -175,7 +333,8 @@ class MemoryEngine:
 
         if isinstance(value, str):
             return (
-                self.privacy_gateway.rehydrate_output(
+                self.privacy_gateway
+                .rehydrate_output(
                     value,
                     mapping,
                 )
@@ -196,7 +355,8 @@ class MemoryEngine:
                     item,
                     mapping,
                 )
-                for key, item in value.items()
+                for key, item
+                in value.items()
             }
 
         return value

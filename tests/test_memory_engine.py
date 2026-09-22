@@ -86,6 +86,37 @@ class FakePrivacyGateway:
         return result
 
 
+class FakeContextSelector:
+
+    def __init__(
+        self,
+        selected_items=None,
+        error=None,
+    ):
+        self.selected_items = (
+            selected_items
+            if selected_items is not None
+            else []
+        )
+        self.error = error
+        self.calls = []
+
+    def select(
+        self,
+        sentences,
+    ):
+        self.calls.append(
+            list(sentences)
+        )
+
+        if self.error is not None:
+            raise self.error
+
+        return SimpleNamespace(
+            selected_items=self.selected_items
+        )
+
+
 class FakePromptBuilder:
 
     def __init__(self):
@@ -157,11 +188,13 @@ class MemoryEnginePrivacyTests(
 
     def make_engine(
         self,
-        gateway,
+        gateway=None,
+        context_selector=None,
     ):
 
         engine = MemoryEngine(
-            privacy_gateway=gateway
+            privacy_gateway=gateway,
+            context_selector=context_selector,
         )
 
         engine.prompt_builder = (
@@ -170,14 +203,137 @@ class MemoryEnginePrivacyTests(
 
         return engine
 
-    def test_privacy_gateway_is_required(self):
+    def test_engine_requires_privacy_or_context_selector(
+        self,
+    ):
 
         with self.assertRaises(
             ValueError
         ):
             MemoryEngine(
-                privacy_gateway=None
+                privacy_gateway=None,
+                context_selector=None,
             )
+
+    def test_privacy_gateway_is_optional_when_context_selector_exists(
+        self,
+    ):
+
+        selector = FakeContextSelector(
+            selected_items=[
+                SimpleNamespace(
+                    original_index=0,
+                    text=(
+                        "I have a meeting "
+                        "tomorrow at 2 PM."
+                    ),
+                )
+            ]
+        )
+
+        engine = self.make_engine(
+            gateway=None,
+            context_selector=selector,
+        )
+
+        result = engine.process(
+            mode="summary",
+            sentences=[
+                (
+                    "I have a meeting "
+                    "tomorrow at 2 PM."
+                )
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "memories": [],
+            },
+        )
+
+        self.assertEqual(
+            len(selector.calls),
+            1,
+        )
+
+        self.assertEqual(
+            engine.prompt_builder.calls[0]["text"],
+            (
+                "I have a meeting "
+                "tomorrow at 2 PM."
+            ),
+        )
+
+        self.client.models.generate_content.assert_called_once()
+
+    def test_privacy_off_keeps_immediate_trigger_sentence(
+        self,
+    ):
+
+        selector = FakeContextSelector(
+            selected_items=[]
+        )
+
+        engine = self.make_engine(
+            gateway=None,
+            context_selector=selector,
+        )
+
+        sentence = (
+            "Remember, my meeting is "
+            "tomorrow at 2 PM."
+        )
+
+        engine.process(
+            mode="immediate",
+            sentences=[
+                sentence
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            engine.prompt_builder.calls[0]["text"],
+            sentence,
+        )
+
+        self.client.models.generate_content.assert_called_once()
+
+    def test_privacy_off_context_selector_error_stops_gemini(
+        self,
+    ):
+
+        selector = FakeContextSelector(
+            error=RuntimeError(
+                "selector failure"
+            )
+        )
+
+        engine = self.make_engine(
+            gateway=None,
+            context_selector=selector,
+        )
+
+        result = engine.process(
+            mode="summary",
+            sentences=[
+                "Potential memory."
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "summary": "",
+                "memories": [],
+            },
+        )
+
+        self.client.models.generate_content.assert_not_called()
 
     def test_blocked_privacy_result_never_calls_gemini(
         self,
@@ -192,7 +348,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         result = engine.process(
@@ -223,7 +379,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         result = engine.process(
@@ -270,7 +426,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         engine.process(
@@ -317,7 +473,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         self.client.models.generate_content.return_value = (
@@ -368,7 +524,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         self.client.models.generate_content.return_value = (
@@ -398,7 +554,9 @@ class MemoryEnginePrivacyTests(
         )
 
         self.assertEqual(
-            len(gateway.validation_calls),
+            len(
+                gateway.validation_calls
+            ),
             1,
         )
 
@@ -422,7 +580,7 @@ class MemoryEnginePrivacyTests(
         )
 
         engine = self.make_engine(
-            gateway
+            gateway=gateway
         )
 
         result = engine.process(

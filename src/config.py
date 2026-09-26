@@ -1,3 +1,6 @@
+# src/config.py
+
+
 # ===========================
 # Audio Settings
 # ===========================
@@ -6,18 +9,18 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 BLOCK_SIZE = 512
 
-# ===========================
-# Whisper
-# ===========================
-
-WHISPER_MODEL = "base"
-WHISPER_LANGUAGE = "en"
-WHISPER_BEAM_SIZE = 5
-WHISPER_MIN_SILENCE_MS = 500
 
 # ===========================
-# Gemini
+# Speech-to-Text Settings
 # ===========================
 
-ENABLE_GEMINI = False
+STT_LANGUAGE = "en"
+STT_MODEL = "universal-3-5-pro"
+
+
+# ===========================
+# Gemini Settings
+# ===========================
+
+ENABLE_GEMINI = True
 GEMINI_MODEL = "gemini-3.6-flash"

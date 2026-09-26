@@ -6,14 +6,13 @@ import numpy as np
 from src.config import SAMPLE_RATE, BLOCK_SIZE
 
 
-class ContinuousTranscriber:
+class AudioChunker:
     """
-    Continuously captures microphone audio and places fixed-duration
-    audio chunks onto the AudioWorker queue.
+    Continuously captures microphone audio and places
+    fixed-duration audio chunks onto the AudioWorker queue.
 
-    Whisper performs speech detection inside each chunk using Silero VAD.
-    The queue insertion is non-blocking so microphone capture will not
-    freeze when the AudioWorker is busy.
+    Speech-to-text processing is handled separately by
+    AudioWorker.
     """
 
     CHUNK_SECONDS = 20
@@ -35,8 +34,6 @@ class ContinuousTranscriber:
         self._thread = None
 
     def start(self):
-        """Start continuous microphone capture."""
-
         if (
             self._thread is not None
             and self._thread.is_alive()
@@ -47,22 +44,20 @@ class ContinuousTranscriber:
 
         self._thread = threading.Thread(
             target=self._run,
-            name="ContinuousTranscriber",
+            name="AudioChunker",
             daemon=True,
         )
 
         self._thread.start()
 
     def stop(self):
-        """Request the capture loop to stop."""
-
         self._stop_event.set()
 
     def join(self, timeout=None):
-        """Wait for the capture thread to finish."""
-
         if self._thread is not None:
-            self._thread.join(timeout=timeout)
+            self._thread.join(
+                timeout=timeout
+            )
 
     def _run(self):
         print(
@@ -84,17 +79,13 @@ class ContinuousTranscriber:
                     self.database.get_listening_enabled()
                 )
 
-                # ---------------------------------
-                # Pause Listening
-                # ---------------------------------
-
                 if not listening_enabled:
 
                     if not is_paused:
-                        # Discard any partially captured audio.
                         position = 0
 
                         self.microphone.stop()
+
                         is_paused = True
 
                         print(
@@ -103,14 +94,13 @@ class ContinuousTranscriber:
                         )
 
                     self._stop_event.wait(0.5)
+
                     continue
 
-                # ---------------------------------
-                # Resume Listening
-                # ---------------------------------
-
                 if is_paused:
+
                     self.microphone.start()
+
                     is_paused = False
 
                     print(
@@ -118,15 +108,10 @@ class ContinuousTranscriber:
                         "Microphone capture started."
                     )
 
-                # ---------------------------------
-                # Capture Audio
-                # ---------------------------------
-
                 audio = self.microphone.read()
 
                 samples = audio.shape[0]
 
-                # Protect against unexpected audio block sizes.
                 remaining_samples = (
                     self.chunk_samples - position
                 )
@@ -162,8 +147,8 @@ class ContinuousTranscriber:
         except Exception as error:
 
             print(
-                "Continuous transcription "
-                f"capture error: {error}"
+                "Continuous audio capture "
+                f"error: {error}"
             )
 
         finally:
@@ -180,9 +165,12 @@ class ContinuousTranscriber:
         samples_to_copy,
     ):
         """
-        Copy microphone samples into the current audio buffer.
+        Copy microphone samples into the current
+        audio buffer.
 
-        The microphone normally returns an array shaped like:
+        The microphone normally returns an array
+        shaped like:
+
         (samples, channels)
         """
 
@@ -191,22 +179,30 @@ class ContinuousTranscriber:
 
         audio_buffer[
             position:position + samples_to_copy
-        ] = audio[:samples_to_copy, 0]
+        ] = audio[
+            :samples_to_copy,
+            0
+        ]
 
     def _enqueue_chunk(self, chunk):
         """
-        Add a completed audio chunk to the AudioWorker queue.
+        Add a completed audio chunk to the
+        AudioWorker queue.
 
-        This operation is non-blocking so microphone capture does not
-        freeze while Whisper is processing another audio chunk.
+        This operation is non-blocking so microphone
+        capture does not freeze while the AudioWorker
+        is processing another audio chunk.
         """
 
         try:
 
-            self.audio_queue.put_nowait(chunk)
+            self.audio_queue.put_nowait(
+                chunk
+            )
 
             print(
-                "📤 Audio chunk added to processing queue."
+                "📤 Audio chunk added to "
+                "processing queue."
             )
 
         except queue.Full:

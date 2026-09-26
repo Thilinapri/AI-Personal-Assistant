@@ -8,14 +8,14 @@ class AudioWorker:
     def __init__(
         self,
         audio_queue,
-        whisper,
+        stt_service,
         transcript_buffer,
         keyword_filter,
         memory_engine,
         memory_manager,
     ):
         self.audio_queue = audio_queue
-        self.whisper = whisper
+        self.stt_service = stt_service
         self.transcript_buffer = transcript_buffer
         self.keyword_filter = keyword_filter
         self.memory_engine = memory_engine
@@ -24,6 +24,7 @@ class AudioWorker:
 
     def stop(self):
         """Prevent any further queued audio from being processed."""
+
         self._stop_event.set()
 
     def run(self):
@@ -52,14 +53,14 @@ class AudioWorker:
         """Transcribe audio and process keyword-triggered memories."""
 
         # -------------------------------------------------
-        # 1. Whisper transcription
+        # 1. Speech-to-text transcription
         # -------------------------------------------------
 
         try:
-            transcription = self.whisper.transcribe(audio)
+            transcription = self.stt_service.transcribe(audio)
 
             print(
-                f"\n📝 Whisper transcription: {transcription!r}"
+                f"\n📝 Speech transcription: {transcription!r}"
             )
 
             if self._stop_event.is_set():
@@ -70,7 +71,7 @@ class AudioWorker:
 
         except Exception as error:
             print(
-                f"Whisper transcription failed: {error}"
+                f"Speech transcription failed: {error}"
             )
             return
 

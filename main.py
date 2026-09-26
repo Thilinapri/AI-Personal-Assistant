@@ -3,7 +3,10 @@ import sys
 import threading
 
 from src.audio.microphone import Microphone
-from src.speech.whisper_model import WhisperService
+
+# Speech-to-text
+from src.speech.assemblyai_service import AssemblyAIService
+
 from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.disabled_memory_engine import DisabledMemoryEngine
@@ -14,12 +17,14 @@ from src.config import ENABLE_GEMINI
 from src.memory.memory_manager import MemoryManager
 from src.memory.embedding_service import EmbeddingService
 from src.memory.retrieval_service import RetrievalService
-from src.memory.rule_based_relationship_classifier import RuleBasedRelationshipClassifier
+from src.memory.rule_based_relationship_classifier import (
+    RuleBasedRelationshipClassifier,
+)
 
 from src.reminder.reminder_manager import ReminderManager
 
 from src.worker.audio_worker import AudioWorker
-from src.worker.continuous_transcriber import ContinuousTranscriber
+from src.worker.audio_chunker import AudioChunker
 from src.worker.session_processor import SessionProcessor
 from src.worker.reminder_worker import ReminderWorker
 
@@ -32,12 +37,14 @@ def configure_console_output():
 
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="backslashreplace")
+            stream.reconfigure(
+                errors="backslashreplace"
+            )
 
 
 def shutdown_components(
     microphone,
-    continuous_transcriber,
+    audio_chunker,
     session_processor,
     reminder_worker,
     web_server,
@@ -51,8 +58,8 @@ def shutdown_components(
     print("\nStopping Assistant...")
 
     # Stop microphone capture first.
-    continuous_transcriber.stop()
-    continuous_transcriber.join()
+    audio_chunker.stop()
+    audio_chunker.join()
 
     # Stop periodic session processing.
     session_processor.stop()
@@ -115,7 +122,9 @@ def main():
         embedding_service=embedding_service,
     )
 
-    relationship_classifier = RuleBasedRelationshipClassifier()
+    relationship_classifier = (
+        RuleBasedRelationshipClassifier()
+    )
 
     # ---------------------------------
     # Reminder Manager
@@ -142,7 +151,9 @@ def main():
     # ---------------------------------
 
     try:
-        backfilled_count = memory_manager.backfill_missing_embeddings()
+        backfilled_count = (
+            memory_manager.backfill_missing_embeddings()
+        )
 
         if backfilled_count > 0:
             print(
@@ -177,7 +188,8 @@ def main():
     # AI Components
     # ---------------------------------
 
-    whisper = WhisperService()
+    # AssemblyAI is now used for speech-to-text.
+    stt_service = AssemblyAIService()
 
     keyword_filter = KeywordFilter()
 
@@ -185,16 +197,22 @@ def main():
 
     if ENABLE_GEMINI:
         memory_engine = MemoryEngine()
-        print("🤖 Gemini memory processing enabled.")
+        print(
+            "🤖 Gemini memory processing enabled."
+        )
     else:
         memory_engine = DisabledMemoryEngine()
-        print("🤖 Gemini memory processing disabled.")
+        print(
+            "🤖 Gemini memory processing disabled."
+        )
 
     # ---------------------------------
     # Audio Queue
     # ---------------------------------
 
-    audio_queue = queue.Queue(maxsize=2)
+    audio_queue = queue.Queue(
+        maxsize=2
+    )
 
     # ---------------------------------
     # Audio Worker
@@ -202,7 +220,7 @@ def main():
 
     worker = AudioWorker(
         audio_queue=audio_queue,
-        whisper=whisper,
+        stt_service=stt_service,
         transcript_buffer=transcript_buffer,
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
@@ -218,16 +236,16 @@ def main():
     worker_thread.start()
 
     # ---------------------------------
-    # Continuous Transcriber
+    # Audio Chunker
     # ---------------------------------
 
-    continuous_transcriber = ContinuousTranscriber(
+    audio_chunker = AudioChunker(
         microphone=microphone,
         audio_queue=audio_queue,
         database=database,
     )
 
-    continuous_transcriber.start()
+    audio_chunker.start()
 
     # ---------------------------------
     # Session Processor
@@ -282,7 +300,7 @@ def main():
 
         shutdown_components(
             microphone=microphone,
-            continuous_transcriber=continuous_transcriber,
+            audio_chunker=audio_chunker,
             session_processor=session_processor,
             reminder_worker=reminder_worker,
             web_server=web_server,

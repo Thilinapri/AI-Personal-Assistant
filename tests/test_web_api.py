@@ -2,6 +2,7 @@ import unittest
 
 from src.database.database import Database
 from web.app import create_app
+from src.reminder.reminder_manager import ReminderManager
 
 
 class FakeRetrievalService:
@@ -43,6 +44,10 @@ class WebApiTests(unittest.TestCase):
     def setUp(self):
         self.database = Database(":memory:")
 
+        self.reminder_manager = ReminderManager(
+            database=self.database,
+        )
+
         self.retrieval_service = (
             FakeRetrievalService()
         )
@@ -55,7 +60,7 @@ class WebApiTests(unittest.TestCase):
             database=self.database,
             embedding_service=object(),
             retrieval_service=self.retrieval_service,
-            reminder_manager=object(),
+            reminder_manager=self.reminder_manager,
             memory_manager=self.memory_manager,
         )
 

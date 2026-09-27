@@ -155,6 +155,7 @@ def create_app(
 
     @app.route("/api/memories", methods=["DELETE"])
     def clear_memories():
+        reminder_manager.cancel_all_pending()
         database.delete_all_memories()
 
         return jsonify(
@@ -166,7 +167,12 @@ def create_app(
 
     @app.route("/api/memories/<int:memory_id>", methods=["DELETE"])
     def delete_memory(memory_id):
-        database.delete_memory(memory_id)
+        reminder_manager.cancel_for_memory(
+            memory_id
+        )
+        database.delete_memory(
+            memory_id
+        )
 
         return jsonify(
             {
@@ -290,7 +296,7 @@ def create_app(
     )
     def cancel_reminder(reminder_id):
 
-        cancelled = database.cancel_reminder(
+        cancelled = reminder_manager.cancel_reminder(
             reminder_id
         )
 

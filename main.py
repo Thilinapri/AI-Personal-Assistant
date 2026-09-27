@@ -36,6 +36,10 @@ from src.privacy.semantic_privacy_classifier import (
 
 from src.reminder.reminder_manager import ReminderManager
 
+from src.cloud.reminder_sync_client import (
+    CloudReminderSyncClient,
+)
+
 from src.worker.audio_worker import AudioWorker
 from src.worker.audio_chunker import AudioChunker
 from src.worker.session_processor import SessionProcessor
@@ -218,11 +222,39 @@ def main():
     )
 
     # ---------------------------------
+    # Optional Cloud Reminder Sync
+    # ---------------------------------
+
+    cloud_sync_client = None
+
+    try:
+        cloud_sync_client = (
+            CloudReminderSyncClient()
+        )
+
+        print(
+            "☁️ Cloud reminder sync enabled."
+        )
+
+    except Exception as error:
+
+        # EchoMind must continue working locally
+        # even when cloud synchronization has not
+        # been configured or cannot initialize.
+        print(
+            "☁️ Cloud reminder sync disabled: "
+            f"{error}"
+        )
+
+    # ---------------------------------
     # Reminder Manager
     # ---------------------------------
 
     reminder_manager = ReminderManager(
         database=database,
+        cloud_sync_client=(
+            cloud_sync_client
+        ),
     )
 
     # ---------------------------------

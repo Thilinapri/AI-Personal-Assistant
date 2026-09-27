@@ -24,7 +24,14 @@ type ReminderSyncPayload = {
   timezone?: string;
 };
 
-function getRequiredEnvironmentVariable(name: string): string {
+type ReminderCancelPayload = {
+  deviceId: string;
+  localReminderId: number;
+};
+
+function getRequiredEnvironmentVariable(
+  name: string
+): string {
   const value = process.env[name]?.trim();
 
   if (!value) {
@@ -44,10 +51,16 @@ function secureTokenMatches(
     return false;
   }
 
-  const receivedBuffer = Buffer.from(receivedToken);
-  const expectedBuffer = Buffer.from(expectedToken);
+  const receivedBuffer =
+    Buffer.from(receivedToken);
 
-  if (receivedBuffer.length !== expectedBuffer.length) {
+  const expectedBuffer =
+    Buffer.from(expectedToken);
+
+  if (
+    receivedBuffer.length !==
+    expectedBuffer.length
+  ) {
     return false;
   }
 
@@ -57,13 +70,34 @@ function secureTokenMatches(
   );
 }
 
-function isValidDateTime(value: string): boolean {
+function isAuthorizedDevice(
+  request: NextRequest
+): boolean {
+  const expectedToken =
+    getRequiredEnvironmentVariable(
+      "ECHOMIND_DEVICE_SYNC_TOKEN"
+    );
+
+  const receivedToken =
+    request.headers.get(
+      "x-echomind-device-token"
+    );
+
+  return secureTokenMatches(
+    receivedToken,
+    expectedToken
+  );
+}
+
+function isValidDateTime(
+  value: string
+): boolean {
   return !Number.isNaN(
     Date.parse(value)
   );
 }
 
-function validatePayload(
+function validateSyncPayload(
   payload: unknown
 ): payload is ReminderSyncPayload {
   if (
@@ -73,7 +107,8 @@ function validatePayload(
     return false;
   }
 
-  const data = payload as Partial<ReminderSyncPayload>;
+  const data =
+    payload as Partial<ReminderSyncPayload>;
 
   if (
     typeof data.deviceId !== "string" ||
@@ -84,7 +119,9 @@ function validatePayload(
 
   if (
     typeof data.localReminderId !== "number" ||
-    !Number.isInteger(data.localReminderId) ||
+    !Number.isInteger(
+      data.localReminderId
+    ) ||
     data.localReminderId < 1
   ) {
     return false;
@@ -95,7 +132,9 @@ function validatePayload(
     data.localMemoryId !== null &&
     (
       typeof data.localMemoryId !== "number" ||
-      !Number.isInteger(data.localMemoryId) ||
+      !Number.isInteger(
+        data.localMemoryId
+      ) ||
       data.localMemoryId < 1
     )
   ) {
@@ -111,7 +150,9 @@ function validatePayload(
 
   if (
     typeof data.reminderTime !== "string" ||
-    !isValidDateTime(data.reminderTime)
+    !isValidDateTime(
+      data.reminderTime
+    )
   ) {
     return false;
   }
@@ -121,13 +162,58 @@ function validatePayload(
     data.eventTime !== null &&
     (
       typeof data.eventTime !== "string" ||
-      !isValidDateTime(data.eventTime)
+      !isValidDateTime(
+        data.eventTime
+      )
     )
   ) {
     return false;
   }
 
   return true;
+}
+
+function validateCancelPayload(
+  payload: unknown
+): payload is ReminderCancelPayload {
+  if (
+    typeof payload !== "object" ||
+    payload === null
+  ) {
+    return false;
+  }
+
+  const data =
+    payload as Partial<ReminderCancelPayload>;
+
+  if (
+    typeof data.deviceId !== "string" ||
+    !data.deviceId.trim()
+  ) {
+    return false;
+  }
+
+  if (
+    typeof data.localReminderId !== "number" ||
+    !Number.isInteger(
+      data.localReminderId
+    ) ||
+    data.localReminderId < 1
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+async function readJsonBody(
+  request: NextRequest
+): Promise<unknown | null> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(
@@ -144,22 +230,7 @@ export async function POST(
         "SUPABASE_SECRET_KEY"
       );
 
-    const expectedDeviceToken =
-      getRequiredEnvironmentVariable(
-        "ECHOMIND_DEVICE_SYNC_TOKEN"
-      );
-
-    const receivedDeviceToken =
-      request.headers.get(
-        "x-echomind-device-token"
-      );
-
-    if (
-      !secureTokenMatches(
-        receivedDeviceToken,
-        expectedDeviceToken
-      )
-    ) {
+    if (!isAuthorizedDevice(request)) {
       return NextResponse.json(
         {
           ok: false,
@@ -171,15 +242,15 @@ export async function POST(
       );
     }
 
-    let payload: unknown;
+    const payload =
+      await readJsonBody(request);
 
-    try {
-      payload = await request.json();
-    } catch {
+    if (payload === null) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Request body must be valid JSON.",
+          error:
+            "Request body must be valid JSON.",
         },
         {
           status: 400,
@@ -187,11 +258,16 @@ export async function POST(
       );
     }
 
-    if (!validatePayload(payload)) {
+    if (
+      !validateSyncPayload(
+        payload
+      )
+    ) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Invalid reminder payload.",
+          error:
+            "Invalid reminder payload.",
         },
         {
           status: 400,
@@ -247,26 +323,37 @@ export async function POST(
     };
 
     const endpoint =
-      `${supabaseUrl}/rest/v1/cloud_reminders` +
-      "?on_conflict=source_device_id,source_reminder_id";
+      `${supabaseUrl}` +
+      "/rest/v1/cloud_reminders" +
+      "?on_conflict=" +
+      "source_device_id,source_reminder_id";
 
-    const response = await fetch(
-      endpoint,
-      {
-        method: "POST",
-        headers: {
-          apikey: supabaseSecretKey,
-          "Content-Type": "application/json",
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "POST",
 
-          Prefer:
-            "resolution=merge-duplicates,return=representation",
-        },
-        body: JSON.stringify(
-          cloudReminder
-        ),
-        cache: "no-store",
-      }
-    );
+          headers: {
+            apikey:
+              supabaseSecretKey,
+
+            "Content-Type":
+              "application/json",
+
+            Prefer:
+              "resolution=merge-duplicates," +
+              "return=representation",
+          },
+
+          body:
+            JSON.stringify(
+              cloudReminder
+            ),
+
+          cache: "no-store",
+        }
+      );
 
     const responseText =
       await response.text();
@@ -294,7 +381,9 @@ export async function POST(
 
     if (responseText) {
       cloudData =
-        JSON.parse(responseText);
+        JSON.parse(
+          responseText
+        );
     }
 
     return NextResponse.json(
@@ -320,7 +409,191 @@ export async function POST(
     return NextResponse.json(
       {
         ok: false,
-        error: "Server configuration error.",
+        error:
+          "Server configuration error.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest
+) {
+  try {
+    const supabaseUrl =
+      getRequiredEnvironmentVariable(
+        "SUPABASE_URL"
+      );
+
+    const supabaseSecretKey =
+      getRequiredEnvironmentVariable(
+        "SUPABASE_SECRET_KEY"
+      );
+
+    if (!isAuthorizedDevice(request)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Unauthorized device.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const payload =
+      await readJsonBody(request);
+
+    if (payload === null) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Request body must be valid JSON.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      !validateCancelPayload(
+        payload
+      )
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Invalid reminder cancellation payload.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const query =
+      new URLSearchParams({
+        source_device_id:
+          `eq.${payload.deviceId.trim()}`,
+
+        source_reminder_id:
+          `eq.${payload.localReminderId}`,
+
+        status:
+          "eq.pending",
+      });
+
+    const endpoint =
+      `${supabaseUrl}` +
+      "/rest/v1/cloud_reminders" +
+      `?${query.toString()}`;
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "PATCH",
+
+          headers: {
+            apikey:
+              supabaseSecretKey,
+
+            "Content-Type":
+              "application/json",
+
+            Prefer:
+              "return=representation",
+          },
+
+          body:
+            JSON.stringify({
+              status:
+                "cancelled",
+
+              updated_at:
+                new Date().toISOString(),
+            }),
+
+          cache:
+            "no-store",
+        }
+      );
+
+    const responseText =
+      await response.text();
+
+    if (!response.ok) {
+      console.error(
+        "Supabase reminder cancellation failed:",
+        response.status,
+        responseText
+      );
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Cloud reminder cancellation failed.",
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+    let updatedRows: unknown[] = [];
+
+    if (responseText) {
+      const parsed =
+        JSON.parse(
+          responseText
+        );
+
+      if (Array.isArray(parsed)) {
+        updatedRows =
+          parsed;
+      }
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+
+        // false is still a successful/idempotent
+        // cancellation request.
+        updated:
+          updatedRows.length > 0,
+
+        reminder:
+          updatedRows,
+      },
+      {
+        status: 200,
+      }
+    );
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unexpected server error.";
+
+    console.error(
+      "Cloud reminder cancellation error:",
+      message
+    );
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Server configuration error.",
       },
       {
         status: 500,

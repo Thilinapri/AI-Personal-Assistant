@@ -2,30 +2,61 @@ from datetime import datetime, timedelta
 
 
 class ReminderManager:
-    """Creates, checks, and triggers reminders for stored memories."""
+    """Creates, checks, cancels, and triggers reminders."""
 
     def __init__(
         self,
         database,
         notifier=None,
         default_lead_minutes=30,
+        cloud_sync_client=None,
     ):
         self.database = database
-        self.notifier = notifier or self._default_notifier
-        self.default_lead_minutes = default_lead_minutes
 
-    def create_for_memory(self, memory_id, memory):
-        """Create a reminder automatically when a memory requires one."""
+        self.notifier = (
+            notifier
+            or self._default_notifier
+        )
 
-        # No reminder requested.
-        if not memory.get("notification"):
+        self.default_lead_minutes = (
+            default_lead_minutes
+        )
+
+        self.cloud_sync_client = (
+            cloud_sync_client
+        )
+
+    def create_for_memory(
+        self,
+        memory_id,
+        memory,
+    ):
+        """
+        Create a reminder for a memory.
+
+        SQLite is written first.
+
+        Cloud synchronization is optional
+        and must never prevent local storage.
+        """
+
+        if not memory.get(
+            "notification"
+        ):
             return None
 
-        date_value = memory.get("date")
-        time_value = memory.get("time")
+        date_value = memory.get(
+            "date"
+        )
 
-        # We need both date and time to schedule a reminder.
-        if not date_value or not time_value:
+        time_value = memory.get(
+            "time"
+        )
+
+        if (
+            not date_value
+            or not time_value
+        ):
             return None
 
         try:
@@ -37,36 +68,242 @@ class ReminderManager:
         except ValueError:
             return None
 
-        reminder_time = event_time - timedelta(
-            minutes=self.default_lead_minutes
+        # Current fallback reminder timing.
+        #
+        # Gemini-generated intelligent timing
+        # can replace this later without changing
+        # cloud synchronization.
+        reminder_time = (
+            event_time
+            - timedelta(
+                minutes=(
+                    self.default_lead_minutes
+                )
+            )
         )
 
-        reminder_time_text = reminder_time.strftime(
-            "%Y-%m-%d %H:%M:%S"
+        reminder_time_text = (
+            reminder_time.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         )
 
-        return self.database.create_reminder(
-            memory_id,
-            reminder_time_text,
+        # ---------------------------------
+        # Store locally first
+        # ---------------------------------
+
+        reminder_id = (
+            self.database.create_reminder(
+                memory_id,
+                reminder_time_text,
+            )
         )
 
-    def cancel_for_memory(self, memory_id):
-        """Cancel pending reminders for an outdated memory."""
+        # ---------------------------------
+        # Optional cloud copy
+        # ---------------------------------
+
+        self._sync_created_reminder(
+            reminder_id=reminder_id,
+            memory_id=memory_id,
+            memory=memory,
+            event_time=event_time,
+            reminder_time=reminder_time,
+        )
+
+        return reminder_id
+
+    def _sync_created_reminder(
+        self,
+        reminder_id,
+        memory_id,
+        memory,
+        event_time,
+        reminder_time,
+    ):
+        """Synchronize a reminder without affecting local storage."""
+
+        if (
+            self.cloud_sync_client
+            is None
+        ):
+            return False
+
+        try:
+            reason = (
+                memory.get(
+                    "reminder_reason"
+                )
+                or memory.get(
+                    "reason"
+                )
+            )
+
+            return (
+                self.cloud_sync_client
+                .sync_reminder(
+                    local_reminder_id=(
+                        reminder_id
+                    ),
+                    local_memory_id=(
+                        memory_id
+                    ),
+                    title=memory.get(
+                        "title",
+                        "EchoMind Reminder",
+                    ),
+                    details=memory.get(
+                        "content",
+                        "",
+                    ),
+                    event_time=(
+                        event_time
+                    ),
+                    reminder_time=(
+                        reminder_time
+                    ),
+                    reason=reason,
+                )
+            )
+
+        except Exception as error:
+            print(
+                "⚠️ Cloud reminder sync "
+                "failed after local storage: "
+                f"{error}"
+            )
+
+            return False
+
+    def cancel_reminder(
+        self,
+        reminder_id,
+    ):
+        """
+        Cancel one reminder.
+
+        Local cancellation happens first.
+        Cloud cancellation is best-effort.
+        """
+
+        cancelled = (
+            self.database.cancel_reminder(
+                reminder_id
+            )
+        )
+
+        if not cancelled:
+            return False
+
+        self._sync_cancelled_reminder(
+            reminder_id
+        )
+
+        return True
+
+    def cancel_for_memory(
+        self,
+        memory_id,
+    ):
+        """
+        Cancel every pending reminder belonging
+        to an outdated or updated memory.
+        """
+
+        reminder_ids = (
+            self.database
+            .get_pending_reminder_ids_for_memory(
+                memory_id
+            )
+        )
 
         self.database.cancel_pending_reminders_for_memory(
             memory_id
         )
 
-    def check_due_reminders(self, current_time=None):
-        """Trigger all pending reminders that are now due."""
-
-        if current_time is None:
-            current_time = datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
+        for reminder_id in reminder_ids:
+            self._sync_cancelled_reminder(
+                reminder_id
             )
 
-        due_reminders = self.database.get_due_reminders(
-            current_time
+        return reminder_ids
+
+    def cancel_all_pending(
+        self,
+    ):
+        """
+        Cancel every pending reminder locally
+        and synchronize the cancellations.
+
+        Used before clearing all memories.
+        """
+
+        reminders = (
+            self.database
+            .get_all_reminders()
+        )
+
+        reminder_ids = [
+            reminder[0]
+            for reminder in reminders
+            if reminder[3] == "pending"
+        ]
+
+        for reminder_id in reminder_ids:
+            self.cancel_reminder(
+                reminder_id
+            )
+
+        return reminder_ids
+
+    def _sync_cancelled_reminder(
+        self,
+        reminder_id,
+    ):
+        """Best-effort cancellation of one cloud reminder."""
+
+        if (
+            self.cloud_sync_client
+            is None
+        ):
+            return False
+
+        try:
+            return (
+                self.cloud_sync_client
+                .cancel_reminder(
+                    local_reminder_id=(
+                        reminder_id
+                    )
+                )
+            )
+
+        except Exception as error:
+            print(
+                "⚠️ Cloud reminder cancellation "
+                "failed after local cancellation: "
+                f"{error}"
+            )
+
+            return False
+
+    def check_due_reminders(
+        self,
+        current_time=None,
+    ):
+        """Trigger pending local reminders whose time has arrived."""
+
+        if current_time is None:
+            current_time = (
+                datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            )
+
+        due_reminders = (
+            self.database.get_due_reminders(
+                current_time
+            )
         )
 
         triggered = []
@@ -79,25 +316,32 @@ class ReminderManager:
             title = reminder[4]
             content = reminder[5]
 
-            # Send the notification first.
             self.notifier(
                 title,
                 content,
                 reminder_time,
             )
 
-            # Only mark it triggered if notification succeeded.
             self.database.mark_reminder_triggered(
                 reminder_id,
                 current_time,
             )
 
             triggered.append({
-                "reminder_id": reminder_id,
-                "memory_id": memory_id,
-                "title": title,
-                "content": content,
-                "reminder_time": reminder_time,
+                "reminder_id":
+                    reminder_id,
+
+                "memory_id":
+                    memory_id,
+
+                "title":
+                    title,
+
+                "content":
+                    content,
+
+                "reminder_time":
+                    reminder_time,
             })
 
         return triggered
@@ -114,7 +358,13 @@ class ReminderManager:
         print("=" * 40)
         print("REMINDER")
         print("=" * 40)
-        print(f"Title: {title}")
-        print(f"Details: {content}")
-        print(f"Scheduled: {reminder_time}")
+        print(
+            f"Title: {title}"
+        )
+        print(
+            f"Details: {content}"
+        )
+        print(
+            f"Scheduled: {reminder_time}"
+        )
         print("=" * 40)

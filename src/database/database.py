@@ -533,6 +533,29 @@ class Database:
 
             return cursor.fetchall()
 
+    def get_pending_reminder_ids_for_memory(
+        self,
+        memory_id,
+    ):
+        """Return pending reminder IDs linked to one memory."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT id
+                FROM reminders
+                WHERE memory_id = ?
+                  AND status = 'pending'
+                ORDER BY id
+            """, (
+                memory_id,
+            ))
+
+            return [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
     def cancel_pending_reminders_for_memory(self, memory_id):
         """Cancel pending reminders linked to an outdated memory."""
 

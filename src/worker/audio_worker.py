@@ -8,14 +8,14 @@ class AudioWorker:
     def __init__(
         self,
         audio_queue,
-        whisper,
+        stt_service,
         transcript_buffer,
         keyword_filter,
         memory_engine,
         memory_manager,
     ):
         self.audio_queue = audio_queue
-        self.whisper = whisper
+        self.stt_service = stt_service
         self.transcript_buffer = transcript_buffer
         self.keyword_filter = keyword_filter
         self.memory_engine = memory_engine
@@ -24,10 +24,11 @@ class AudioWorker:
 
     def stop(self):
         """Prevent any further queued audio from being processed."""
+
         self._stop_event.set()
 
     def run(self):
-        """Consume audio until the queue sentinel is received."""
+        """Consume audio from the queue until a sentinel is received."""
 
         while True:
             audio = self.audio_queue.get()
@@ -52,14 +53,14 @@ class AudioWorker:
         """Transcribe audio and process keyword-triggered memories."""
 
         # -------------------------------------------------
-        # 1. Whisper transcription
+        # 1. Speech-to-text transcription
         # -------------------------------------------------
 
         try:
-            transcription = self.whisper.transcribe(audio)
+            transcription = self.stt_service.transcribe(audio)
 
             print(
-                f"\n📝 Whisper transcription: {transcription!r}"
+                f"\n📝 Speech transcription: {transcription!r}"
             )
 
             if self._stop_event.is_set():
@@ -70,14 +71,14 @@ class AudioWorker:
 
         except Exception as error:
             print(
-                f"Whisper transcription failed: {error}"
+                f"Speech transcription failed: {error}"
             )
             return
 
-        if not transcription or not transcription.strip():
-            return
-
         transcription = transcription.strip()
+
+        if not transcription:
+            return
 
         # -------------------------------------------------
         # 2. Add transcription to conversation buffer
@@ -123,8 +124,7 @@ class AudioWorker:
             )
             return
 
-        # No immediate keyword.
-        # Keep the transcript in the 20-minute buffer.
+        # Keep normal conversation in the session buffer.
         if not should_process:
             return
 
@@ -152,11 +152,11 @@ class AudioWorker:
                 current_time=datetime.now(),
             )
 
+            memories = result.get("memories", [])
+
             print(
                 f"🤖 Gemini result: {result!r}"
             )
-
-            memories = result["memories"]
 
             print(
                 f"🧠 Memories extracted: {memories!r}"
@@ -174,13 +174,11 @@ class AudioWorker:
             return
 
         # -------------------------------------------------
-        # 5. Store memories using the new MemoryManager
+        # 5. Store memories using MemoryManager
         # -------------------------------------------------
 
         try:
-            self.memory_manager.store_memories(
-                memories
-            )
+            self.memory_manager.store_memories(memories)
 
             print(
                 "💾 Memories saved through MemoryManager."

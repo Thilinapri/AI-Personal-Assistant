@@ -4,14 +4,17 @@ import sys
 import threading
 
 from src.audio.microphone import Microphone
-from src.speech.whisper_model import WhisperService
+
+# Speech-to-text
+from src.speech.assemblyai_service import AssemblyAIService
+
 from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
-from src.ai.disabled_memory_engine import (
-    DisabledMemoryEngine,
-)
+from src.ai.disabled_memory_engine import DisabledMemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
+
 from src.database.database import Database
+
 from src.config import (
     ENABLE_GEMINI,
     ENABLE_PRIVACY_GATEWAY,
@@ -34,9 +37,7 @@ from src.privacy.semantic_privacy_classifier import (
 from src.reminder.reminder_manager import ReminderManager
 
 from src.worker.audio_worker import AudioWorker
-from src.worker.continuous_transcriber import (
-    ContinuousTranscriber,
-)
+from src.worker.audio_chunker import AudioChunker
 from src.worker.session_processor import SessionProcessor
 from src.worker.reminder_worker import ReminderWorker
 
@@ -69,7 +70,7 @@ def configure_console_output():
 
 def shutdown_components(
     microphone,
-    continuous_transcriber,
+    audio_chunker,
     session_processor,
     reminder_worker,
     web_server,
@@ -82,13 +83,17 @@ def shutdown_components(
 
     print("\nStopping Assistant...")
 
-    continuous_transcriber.stop()
-    continuous_transcriber.join()
+    # Stop microphone/audio collection first.
+    audio_chunker.stop()
+    audio_chunker.join()
 
+    # Stop periodic session processing.
     session_processor.stop()
 
+    # Prevent AudioWorker from processing more audio.
     worker.stop()
 
+    # Remove audio chunks still waiting.
     while True:
         try:
             audio_queue.get_nowait()
@@ -97,17 +102,22 @@ def shutdown_components(
         except queue.Empty:
             break
 
+    # Wake AudioWorker and tell it to exit.
     audio_queue.put(None)
 
+    # Wait for workers to finish.
     session_processor.join()
     worker_thread.join()
 
+    # Stop reminder checking before closing database.
     reminder_worker.stop()
     reminder_worker.join()
 
+    # Stop dashboard before closing shared database.
     web_server.stop()
     web_server.join()
 
+    # Close shared resources last.
     database.close()
     microphone.stop()
 
@@ -274,7 +284,8 @@ def main():
     # AI Components
     # ---------------------------------
 
-    whisper = WhisperService()
+    # AssemblyAI is now used for speech-to-text.
+    stt_service = AssemblyAIService()
 
     keyword_filter = KeywordFilter()
 
@@ -303,7 +314,9 @@ def main():
     # Audio Queue
     # ---------------------------------
 
-    audio_queue = queue.Queue()
+    audio_queue = queue.Queue(
+        maxsize=2
+    )
 
     # ---------------------------------
     # Audio Worker
@@ -311,7 +324,7 @@ def main():
 
     worker = AudioWorker(
         audio_queue=audio_queue,
-        whisper=whisper,
+        stt_service=stt_service,
         transcript_buffer=transcript_buffer,
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
@@ -327,18 +340,16 @@ def main():
     worker_thread.start()
 
     # ---------------------------------
-    # Continuous Transcriber
+    # Audio Chunker
     # ---------------------------------
 
-    continuous_transcriber = (
-        ContinuousTranscriber(
-            microphone=microphone,
-            audio_queue=audio_queue,
-            database=database,
-        )
+    audio_chunker = AudioChunker(
+        microphone=microphone,
+        audio_queue=audio_queue,
+        database=database,
     )
 
-    continuous_transcriber.start()
+    audio_chunker.start()
 
     # ---------------------------------
     # Session Processor
@@ -395,9 +406,7 @@ def main():
 
         shutdown_components(
             microphone=microphone,
-            continuous_transcriber=(
-                continuous_transcriber
-            ),
+            audio_chunker=audio_chunker,
             session_processor=session_processor,
             reminder_worker=reminder_worker,
             web_server=web_server,

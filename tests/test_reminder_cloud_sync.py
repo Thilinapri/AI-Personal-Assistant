@@ -64,6 +64,7 @@ class ReminderCloudSyncTests(
 
     def _create_memory(
         self,
+        reminder_before_hours=None,
     ):
         memory = {
             "category":
@@ -85,6 +86,14 @@ class ReminderCloudSyncTests(
                 True,
         }
 
+        if (
+            reminder_before_hours
+            is not None
+        ):
+            memory[
+                "reminder_before_hours"
+            ] = reminder_before_hours
+
         memory_id = (
             self.database.insert_memory(
                 memory
@@ -94,6 +103,118 @@ class ReminderCloudSyncTests(
         return (
             memory_id,
             memory,
+        )
+
+    def test_smart_reminder_hours_control_schedule(
+        self,
+    ):
+        cloud_client = (
+            FakeCloudSyncClient()
+        )
+
+        reminder_manager = (
+            ReminderManager(
+                database=self.database,
+                cloud_sync_client=(
+                    cloud_client
+                ),
+            )
+        )
+
+        (
+            memory_id,
+            memory,
+        ) = self._create_memory(
+            reminder_before_hours=2
+        )
+
+        reminder_manager.create_for_memory(
+            memory_id,
+            memory,
+        )
+
+        reminders = (
+            self.database
+            .get_all_reminders()
+        )
+
+        self.assertEqual(
+            reminders[0][2],
+            "2099-01-01 13:00:00",
+        )
+
+        payload = (
+            cloud_client
+            .sync_calls[0]
+        )
+
+        self.assertEqual(
+            payload[
+                "reminder_time"
+            ].strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            "2099-01-01 13:00:00",
+        )
+
+    def test_missing_smart_reminder_uses_default_fallback(
+        self,
+    ):
+        reminder_manager = (
+            ReminderManager(
+                database=self.database,
+            )
+        )
+
+        (
+            memory_id,
+            memory,
+        ) = self._create_memory()
+
+        reminder_manager.create_for_memory(
+            memory_id,
+            memory,
+        )
+
+        reminders = (
+            self.database
+            .get_all_reminders()
+        )
+
+        self.assertEqual(
+            reminders[0][2],
+            "2099-01-01 14:30:00",
+        )
+
+    def test_invalid_smart_reminder_uses_default_fallback(
+        self,
+    ):
+        reminder_manager = (
+            ReminderManager(
+                database=self.database,
+            )
+        )
+
+        (
+            memory_id,
+            memory,
+        ) = self._create_memory(
+            reminder_before_hours="invalid"
+        )
+
+        reminder_manager.create_for_memory(
+            memory_id,
+            memory,
+        )
+
+        reminders = (
+            self.database
+            .get_all_reminders()
+        )
+
+        self.assertEqual(
+            reminders[0][2],
+            "2099-01-01 14:30:00",
         )
 
     def test_created_reminder_is_synced_to_cloud(

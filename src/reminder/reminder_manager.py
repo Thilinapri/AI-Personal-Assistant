@@ -34,10 +34,15 @@ class ReminderManager:
         """
         Create a reminder for a memory.
 
+        Smart reminder timing is used when Gemini provides
+        reminder_before_hours.
+
+        The existing default lead time remains as a fallback.
+
         SQLite is written first.
 
-        Cloud synchronization is optional
-        and must never prevent local storage.
+        Cloud synchronization is optional and must never
+        prevent local storage.
         """
 
         if not memory.get(
@@ -68,17 +73,10 @@ class ReminderManager:
         except ValueError:
             return None
 
-        # Current fallback reminder timing.
-        #
-        # Gemini-generated intelligent timing
-        # can replace this later without changing
-        # cloud synchronization.
         reminder_time = (
-            event_time
-            - timedelta(
-                minutes=(
-                    self.default_lead_minutes
-                )
+            self._calculate_reminder_time(
+                event_time=event_time,
+                memory=memory,
             )
         )
 
@@ -112,6 +110,59 @@ class ReminderManager:
         )
 
         return reminder_id
+
+    def _calculate_reminder_time(
+        self,
+        event_time,
+        memory,
+    ):
+        """
+        Calculate reminder time.
+
+        Prefer Gemini's smart reminder lead time when valid.
+
+        Fall back to the existing 30-minute/default lead
+        when the field is missing, zero, negative, or invalid.
+        """
+
+        reminder_before_hours = (
+            memory.get(
+                "reminder_before_hours"
+            )
+        )
+
+        if (
+            reminder_before_hours
+            is not None
+        ):
+            try:
+                lead_hours = float(
+                    reminder_before_hours
+                )
+
+                if lead_hours > 0:
+                    return (
+                        event_time
+                        - timedelta(
+                            hours=lead_hours
+                        )
+                    )
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                pass
+
+        # Existing fallback behavior.
+        return (
+            event_time
+            - timedelta(
+                minutes=(
+                    self.default_lead_minutes
+                )
+            )
+        )
 
     def _sync_created_reminder(
         self,

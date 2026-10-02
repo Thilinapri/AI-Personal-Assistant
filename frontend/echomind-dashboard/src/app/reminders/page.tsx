@@ -8,6 +8,10 @@ import React, {
 } from "react";
 
 import {
+  formatDateTime,
+} from "@/lib/formatters";
+
+import {
   PageHeader,
 } from "@/components/common/PageHeader";
 
@@ -688,8 +692,9 @@ export default function RemindersPage() {
                               : "Remind at:"}{" "}
 
                             <strong className="font-semibold text-slate-700">
-                              {reminder.reminder_time ||
-                                "Not scheduled"}
+                              {formatDateTime(
+                                reminder.reminder_time,
+                              )}
                             </strong>
                           </span>
                         </span>
@@ -699,7 +704,9 @@ export default function RemindersPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" />
 
                             Notified{" "}
-                            {reminder.triggered_at}
+                            {formatDateTime(
+                              reminder.triggered_at,
+                            )}
                           </span>
                         )}
                       </div>

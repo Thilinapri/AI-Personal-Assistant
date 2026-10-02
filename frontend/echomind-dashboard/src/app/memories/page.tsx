@@ -10,6 +10,11 @@ import React, {
 import { PageHeader } from "@/components/common/PageHeader";
 
 import {
+  formatDate,
+  formatTime,
+} from "@/lib/formatters";
+
+import {
   ApiMemoriesResponse,
   ApiMemoryMutationResponse,
   Memory,
@@ -62,25 +67,43 @@ export default function MemoriesPage() {
   const [loading, setLoading] =
     useState(true);
 
-  const [selectedCategory, setSelectedCategory] =
+  const [
+    selectedCategory,
+    setSelectedCategory,
+  ] =
     useState<MemoryCategory>("All");
 
-  const [editingMemory, setEditingMemory] =
+  const [
+    editingMemory,
+    setEditingMemory,
+  ] =
     useState<Memory | null>(null);
 
-  const [editForm, setEditForm] =
+  const [
+    editForm,
+    setEditForm,
+  ] =
     useState<MemoryUpdatePayload | null>(null);
 
   const [saving, setSaving] =
     useState(false);
 
-  const [deleteConfirmId, setDeleteConfirmId] =
+  const [
+    deleteConfirmId,
+    setDeleteConfirmId,
+  ] =
     useState<number | null>(null);
 
-  const [deletingId, setDeletingId] =
+  const [
+    deletingId,
+    setDeletingId,
+  ] =
     useState<number | null>(null);
 
-  const [clearConfirmOpen, setClearConfirmOpen] =
+  const [
+    clearConfirmOpen,
+    setClearConfirmOpen,
+  ] =
     useState(false);
 
   const [clearing, setClearing] =
@@ -112,6 +135,7 @@ export default function MemoriesPage() {
       } catch (error: unknown) {
         setResponse({
           available: false,
+
           error:
             error instanceof Error
               ? error.message
@@ -140,7 +164,10 @@ export default function MemoriesPage() {
 
   const filteredMemories =
     useMemo(() => {
-      if (selectedCategory === "All") {
+      if (
+        selectedCategory ===
+        "All"
+      ) {
         return allMemories;
       }
 
@@ -149,7 +176,8 @@ export default function MemoriesPage() {
           memory.category
             .trim()
             .toLowerCase() ===
-          selectedCategory.toLowerCase(),
+          selectedCategory
+            .toLowerCase(),
       );
     }, [
       allMemories,
@@ -158,15 +186,19 @@ export default function MemoriesPage() {
 
   const categoryCounts =
     useMemo(() => {
-      const counts: Record<string, number> = {
-        All: allMemories.length,
-      };
+      const counts:
+        Record<string, number> = {
+          All: allMemories.length,
+        };
 
       for (
         const category
         of CATEGORIES
       ) {
-        if (category === "All") {
+        if (
+          category ===
+          "All"
+        ) {
           continue;
         }
 
@@ -176,7 +208,8 @@ export default function MemoriesPage() {
               memory.category
                 .trim()
                 .toLowerCase() ===
-              category.toLowerCase(),
+              category
+                .toLowerCase(),
           ).length;
       }
 
@@ -193,12 +226,23 @@ export default function MemoriesPage() {
       setEditingMemory(memory);
 
       setEditForm({
-        category: memory.category,
-        title: memory.title,
-        content: memory.content,
-        date: memory.date || "",
-        time: memory.time || "",
-        notification: memory.notification,
+        category:
+          memory.category,
+
+        title:
+          memory.title,
+
+        content:
+          memory.content,
+
+        date:
+          memory.date || "",
+
+        time:
+          memory.time || "",
+
+        notification:
+          memory.notification,
       });
     };
 
@@ -267,18 +311,19 @@ export default function MemoriesPage() {
                   "application/json",
               },
 
-              body: JSON.stringify({
-                ...editForm,
+              body:
+                JSON.stringify({
+                  ...editForm,
 
-                title:
-                  editForm.title.trim(),
+                  title:
+                    editForm.title.trim(),
 
-                content:
-                  editForm.content.trim(),
+                  content:
+                    editForm.content.trim(),
 
-                category:
-                  editForm.category.trim(),
-              }),
+                  category:
+                    editForm.category.trim(),
+                }),
 
               cache: "no-store",
             },
@@ -443,11 +488,14 @@ export default function MemoriesPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {isAvailable &&
-              allMemories.length > 0 && (
+              allMemories.length >
+                0 && (
                 <button
                   type="button"
                   onClick={() =>
-                    setClearConfirmOpen(true)
+                    setClearConfirmOpen(
+                      true,
+                    )
                   }
                   disabled={clearing}
                   className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:opacity-50"
@@ -480,13 +528,15 @@ export default function MemoriesPage() {
       {feedback && (
         <div
           className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-xs shadow-sm ${
-            feedback.type === "success"
+            feedback.type ===
+            "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-900"
               : "border-rose-200 bg-rose-50 text-rose-900"
           }`}
         >
           <div className="flex items-center gap-2">
-            {feedback.type === "success" ? (
+            {feedback.type ===
+            "success" ? (
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             ) : (
               <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
@@ -533,7 +583,9 @@ export default function MemoriesPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setClearConfirmOpen(false)
+                  setClearConfirmOpen(
+                    false,
+                  )
                 }
                 disabled={clearing}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -543,7 +595,9 @@ export default function MemoriesPage() {
 
               <button
                 type="button"
-                onClick={clearAllMemories}
+                onClick={
+                  clearAllMemories
+                }
                 disabled={clearing}
                 className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-rose-700 disabled:opacity-50"
               >
@@ -589,7 +643,9 @@ export default function MemoriesPage() {
           </span>
 
           {CATEGORIES.map(
-            (category) => {
+            (
+              category,
+            ) => {
               const selected =
                 selectedCategory ===
                 category;
@@ -632,13 +688,17 @@ export default function MemoriesPage() {
       {loading && (
         <div className="space-y-4">
           {[1, 2, 3].map(
-            (value) => (
+            (
+              value,
+            ) => (
               <div
                 key={value}
                 className="animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
               >
                 <div className="h-5 w-1/3 rounded bg-slate-200" />
+
                 <div className="mt-4 h-4 w-full rounded bg-slate-200" />
+
                 <div className="mt-2 h-4 w-2/3 rounded bg-slate-200" />
               </div>
             ),
@@ -648,7 +708,8 @@ export default function MemoriesPage() {
 
       {!loading &&
         isAvailable &&
-        allMemories.length === 0 && (
+        allMemories.length ===
+          0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-12 text-center shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
               <Brain className="h-6 w-6" />
@@ -666,8 +727,10 @@ export default function MemoriesPage() {
 
       {!loading &&
         isAvailable &&
-        allMemories.length > 0 &&
-        filteredMemories.length === 0 && (
+        allMemories.length >
+          0 &&
+        filteredMemories.length ===
+          0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
             <FileQuestion className="mx-auto h-7 w-7 text-slate-400" />
 
@@ -678,7 +741,9 @@ export default function MemoriesPage() {
             <button
               type="button"
               onClick={() =>
-                setSelectedCategory("All")
+                setSelectedCategory(
+                  "All",
+                )
               }
               className="mt-3 text-xs font-bold text-indigo-600"
             >
@@ -689,10 +754,13 @@ export default function MemoriesPage() {
 
       {!loading &&
         isAvailable &&
-        filteredMemories.length > 0 && (
+        filteredMemories.length >
+          0 && (
           <div className="space-y-4">
             {filteredMemories.map(
-              (memory) => {
+              (
+                memory,
+              ) => {
                 const hasSupersedes =
                   memory.supersedes_id !==
                     null &&
@@ -700,7 +768,8 @@ export default function MemoriesPage() {
                     undefined;
 
                 const duplicate =
-                  memory.seen_count > 1;
+                  memory.seen_count >
+                  1;
 
                 const missingDate =
                   !memory.date ||
@@ -750,7 +819,9 @@ export default function MemoriesPage() {
 
                           <button
                             type="button"
-                            onClick={cancelEditing}
+                            onClick={
+                              cancelEditing
+                            }
                             disabled={saving}
                             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
                           >
@@ -777,10 +848,16 @@ export default function MemoriesPage() {
                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-900"
                             >
                               {EDITABLE_CATEGORIES.map(
-                                (category) => (
+                                (
+                                  category,
+                                ) => (
                                   <option
-                                    key={category}
-                                    value={category}
+                                    key={
+                                      category
+                                    }
+                                    value={
+                                      category
+                                    }
                                   >
                                     {category}
                                   </option>
@@ -900,7 +977,9 @@ export default function MemoriesPage() {
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
                           <button
                             type="button"
-                            onClick={cancelEditing}
+                            onClick={
+                              cancelEditing
+                            }
                             disabled={saving}
                             className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
@@ -909,7 +988,9 @@ export default function MemoriesPage() {
 
                           <button
                             type="button"
-                            onClick={saveMemory}
+                            onClick={
+                              saveMemory
+                            }
                             disabled={saving}
                             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-700 disabled:opacity-50"
                           >
@@ -963,7 +1044,9 @@ export default function MemoriesPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                startEditing(memory)
+                                startEditing(
+                                  memory,
+                                )
                               }
                               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                             >
@@ -1014,7 +1097,9 @@ export default function MemoriesPage() {
 
                             {missingDate
                               ? "No date specified"
-                              : memory.date}
+                              : formatDate(
+                                  memory.date,
+                                )}
                           </span>
 
                           <span className="inline-flex items-center gap-1.5">
@@ -1022,7 +1107,9 @@ export default function MemoriesPage() {
 
                             {missingTime
                               ? "No time specified"
-                              : memory.time}
+                              : formatTime(
+                                  memory.time,
+                                )}
                           </span>
 
                           <span className="inline-flex items-center gap-1.5">
@@ -1064,7 +1151,9 @@ export default function MemoriesPage() {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setDeleteConfirmId(null)
+                                  setDeleteConfirmId(
+                                    null,
+                                  )
                                 }
                                 disabled={deleting}
                                 className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"

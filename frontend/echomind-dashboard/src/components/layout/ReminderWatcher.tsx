@@ -9,6 +9,10 @@ import React, {
 import Link from "next/link";
 
 import {
+  formatDateTime,
+} from "@/lib/formatters";
+
+import {
   ApiRemindersResponse,
   Reminder,
 } from "@/types/api";
@@ -190,7 +194,9 @@ export const ReminderWatcher = () => {
               <Clock className="h-3.5 w-3.5" />
 
               Scheduled for{" "}
-              {activeReminder.reminder_time}
+              {formatDateTime(
+                activeReminder.reminder_time,
+              )}
             </div>
           )}
 

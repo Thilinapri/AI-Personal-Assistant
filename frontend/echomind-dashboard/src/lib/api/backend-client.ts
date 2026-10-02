@@ -9,6 +9,9 @@ import {
   MemorySearchResult,
   Reminder,
   SystemStatus,
+  ApiListeningResponse,
+  ApiMemoryMutationResponse,
+  MemoryUpdatePayload,
 } from "@/types/api";
 
 /**
@@ -365,6 +368,358 @@ export async function cancelBackendReminder(
       available: false,
       success: false,
       error: errorMessage,
+    };
+  }
+}
+export async function updateBackendListening(
+  enabled: boolean,
+): Promise<ApiListeningResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/listening`;
+
+  try {
+    const controller =
+      new AbortController();
+
+    const timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        3500,
+      );
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "POST",
+
+          signal:
+            controller.signal,
+
+          headers: {
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              enabled,
+            }),
+
+          cache:
+            "no-store",
+        },
+      );
+
+    clearTimeout(
+      timeoutId,
+    );
+
+    if (!response.ok) {
+      const errorJson =
+        await response
+          .json()
+          .catch(
+            () => null,
+          ) as {
+            error?: string;
+          } | null;
+
+      return {
+        available: true,
+        success: false,
+
+        error:
+          errorJson?.error ||
+          `Backend responded with HTTP ${response.status}`,
+      };
+    }
+
+    const data =
+      await response.json() as {
+        success: boolean;
+        listening: string;
+      };
+
+    return {
+      available: true,
+      success:
+        data.success,
+
+      listening:
+        data.listening,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to update listening state.";
+
+    return {
+      available: false,
+      success: false,
+      error: message,
+    };
+  }
+}
+
+
+export async function updateBackendMemory(
+  memoryId: number,
+  memory: MemoryUpdatePayload,
+): Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories/${memoryId}`;
+
+  try {
+    const controller =
+      new AbortController();
+
+    const timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        5000,
+      );
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "PUT",
+
+          signal:
+            controller.signal,
+
+          headers: {
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify(
+              memory,
+            ),
+
+          cache:
+            "no-store",
+        },
+      );
+
+    clearTimeout(
+      timeoutId,
+    );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          memory_id?: number;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          `Backend responded with HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      memory_id:
+        data?.memory_id ??
+        memoryId,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Memory update failed.",
+    };
+  }
+}
+
+
+export async function deleteBackendMemory(
+  memoryId: number,
+): Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories/${memoryId}`;
+
+  try {
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method:
+            "DELETE",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+
+          cache:
+            "no-store",
+        },
+      );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          memory_id?: number;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          "Memory deletion failed.",
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      memory_id:
+        data?.memory_id ??
+        memoryId,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Memory deletion failed.",
+    };
+  }
+}
+
+
+export async function clearBackendMemories():
+Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories`;
+
+  try {
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method:
+            "DELETE",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+
+          cache:
+            "no-store",
+        },
+      );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          message?: string;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          "Unable to clear memories.",
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      message:
+        data?.message,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to clear memories.",
     };
   }
 }

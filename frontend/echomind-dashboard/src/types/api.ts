@@ -83,3 +83,27 @@ export interface ApiCancelReminderResponse {
 }
 
 export type ReminderStatusFilter = "All" | "Pending" | "Notified" | "Cancelled";
+
+export interface ApiListeningResponse {
+  available: boolean;
+  success?: boolean;
+  listening?: string;
+  error?: string;
+}
+
+export interface MemoryUpdatePayload {
+  category: string;
+  title: string;
+  content: string;
+  date: string;
+  time: string;
+  notification: boolean;
+}
+
+export interface ApiMemoryMutationResponse {
+  available: boolean;
+  success?: boolean;
+  memory_id?: number;
+  message?: string;
+  error?: string;
+}

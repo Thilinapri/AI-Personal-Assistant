@@ -275,6 +275,15 @@ export async function POST(
       );
     }
 
+    const notificationTitle =
+      payload.notificationTitle?.trim() ||
+      payload.title.trim();
+
+    const notificationBody =
+      payload.notificationBody?.trim() ||
+      payload.details?.trim() ||
+      "You have an upcoming reminder.";
+
     const cloudReminder = {
       source_device_id:
         payload.deviceId.trim(),
@@ -304,12 +313,10 @@ export async function POST(
         payload.reason?.trim() || null,
 
       notification_title:
-        payload.notificationTitle?.trim() ||
-        "EchoMind Reminder",
+        notificationTitle,
 
       notification_body:
-        payload.notificationBody?.trim() ||
-        "You have an upcoming reminder.",
+        notificationBody,
 
       timezone:
         payload.timezone?.trim() ||
@@ -566,8 +573,6 @@ export async function PATCH(
       {
         ok: true,
 
-        // false is still a successful/idempotent
-        // cancellation request.
         updated:
           updatedRows.length > 0,
 

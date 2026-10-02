@@ -61,7 +61,9 @@ Allowed categories:
 IMPORTANT MEMORY RULES:
 
 1. Return JSON ONLY.
+
 2. Do not explain your reasoning.
+
 3. If nothing useful should be remembered, return:
 
 {{
@@ -118,7 +120,8 @@ Good extraction:
     "content": "Project presentation has moved to September 25th at 2:00 PM.",
     "date": "2026-09-25",
     "time": "14:00",
-    "notification": true
+    "notification": true,
+    "reminder_before_hours": 2
 }}
 
 7. Keep titles stable whenever possible.
@@ -143,24 +146,58 @@ existing memory.
 and the statement describes something the user wants
 EchoMind to retain, prefer the Reminder category when appropriate.
 
-9. Set "notification" to true when the user explicitly requests
-a reminder or clearly asks EchoMind to remind them.
+9. Set "notification" to true when:
+
+- the user explicitly requests a reminder, OR
+- the memory represents an upcoming event or activity that would
+  reasonably benefit from a reminder.
 
 Examples:
 - "Remind me about the meeting." -> true
 - "Don't forget to remind me." -> true
+- an important upcoming appointment may also -> true
 
 For an update to an existing reminder-type event, keep
-notification true when the user's wording clearly continues
-the reminder intent.
+notification true when the reminder is still useful.
 
-10. Date format must be:
+10. SMART REMINDER:
+
+When notification is true, intelligently determine how many hours
+before the event the reminder should be sent.
+
+Consider:
+- event type
+- importance
+- preparation required
+- travel requirements
+- urgency
+- available context
+
+Return this value as:
+
+"reminder_before_hours"
+
+Do not use one fixed reminder time for every event.
+
+Examples:
+- routine meeting may need a short lead time
+- exam or important presentation may need more preparation time
+- travel-related events may need additional lead time
+
+If notification is false:
+
+"reminder_before_hours": 0
+
+Do not invent an event date or event time that the user
+did not provide.
+
+11. Date format must be:
 
 YYYY-MM-DD
 
 or an empty string if there is no date.
 
-11. Time format must be:
+12. Time format must be:
 
 HH:MM
 
@@ -173,14 +210,21 @@ Examples:
 2 PM -> 14:00
 6:30 PM -> 18:30
 
-12. Resolve explicit dates using the current date when necessary.
+13. Resolve explicit and relative dates using the current date
+and time when necessary.
 
-13. title and content must both be non-empty strings.
+14. title and content must both be non-empty strings.
 
-14. notification must be a JSON boolean:
+15. notification must be a JSON boolean:
 true or false
 
-15. Use exactly this JSON structure:
+16. reminder_before_hours must be a JSON number.
+
+When notification is false, use:
+
+"reminder_before_hours": 0
+
+17. Use exactly this JSON structure:
 
 {{
     "memories": [
@@ -190,7 +234,8 @@ true or false
             "content": "",
             "date": "",
             "time": "",
-            "notification": false
+            "notification": false,
+            "reminder_before_hours": 0
         }}
     ]
 }}
@@ -241,7 +286,8 @@ Use this exact response structure:
             "content": "User needs to schedule a dentist appointment next week.",
             "date": "",
             "time": "",
-            "notification": false
+            "notification": false,
+            "reminder_before_hours": 0
         }}
     ]
 }}
@@ -255,20 +301,25 @@ MEMORY RULES:
 - date
 - time
 - notification
+- reminder_before_hours
 
-2. title and content must be non-empty strings.
+2. category must be one of the allowed categories.
 
-3. date must be:
+3. title and content must be non-empty strings.
+
+4. date must be:
 YYYY-MM-DD
 or an empty string.
 
-4. time must be:
+5. time must be:
 HH:MM
 or an empty string.
 
-5. notification must be a JSON boolean.
+6. notification must be a JSON boolean.
 
-6. Extract updates and corrections as memories.
+7. reminder_before_hours must be a JSON number.
+
+8. Extract updates and corrections as memories.
 
 Statements such as:
 - moved
@@ -276,20 +327,50 @@ Statements such as:
 - rescheduled
 - postponed
 - updated
+- cancelled
 - now
 - instead
+- no longer
 
 must not be ignored.
 
 The Memory Manager will later decide whether the extracted
 information is a new memory, duplicate, update, or related memory.
 
-7. For updated information:
+9. For updated information:
 - extract the latest/current value
 - keep the title stable where possible
 - preserve the change in the content
 
-8. Use an empty memories list when there are no useful
+10. SMART REMINDER:
+
+If a memory represents an upcoming event or activity that would
+benefit from a reminder, set notification to true.
+
+When notification is true, intelligently determine an appropriate
+reminder lead time based on:
+- event type
+- importance
+- preparation required
+- travel requirements
+- urgency
+- available context
+
+Return the selected lead time in:
+
+"reminder_before_hours"
+
+Do not use one fixed reminder time for every event.
+
+If no reminder is appropriate:
+
+"notification": false,
+"reminder_before_hours": 0
+
+Do not invent an exact event date or time when the user
+did not provide one.
+
+11. Use an empty memories list when there are no useful
 memories to save.
 
 Conversation:

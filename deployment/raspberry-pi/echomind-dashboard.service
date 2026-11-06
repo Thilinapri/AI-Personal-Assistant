@@ -1,0 +1,17 @@
+[Unit]
+Description=EchoMind Next.js Dashboard
+Wants=network-online.target echomind-backend.service
+After=network-online.target echomind-backend.service
+
+[Service]
+Type=simple
+User=__PI_USER__
+WorkingDirectory=__REPO_DIR__/frontend/echomind-dashboard
+Environment=NODE_ENV=production
+Environment=PATH=__NODE_BIN_DIR__:/usr/local/bin:/usr/bin:/bin
+ExecStart=__NPM_BIN__ run start -- -H 0.0.0.0 -p 3000
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

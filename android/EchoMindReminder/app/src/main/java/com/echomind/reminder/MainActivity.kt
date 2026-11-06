@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.echomind.reminder.ui.EchoMindHomeScreen
 import com.google.firebase.messaging.FirebaseMessaging
@@ -143,26 +144,10 @@ class MainActivity :
 
 
     private fun updateNotificationStatus() {
-
         notificationsEnabled.value =
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.TIRAMISU
-            ) {
-
-                ContextCompat
-                    .checkSelfPermission(
-                        this,
-                        Manifest.permission
-                            .POST_NOTIFICATIONS,
-                    ) ==
-                    PackageManager
-                        .PERMISSION_GRANTED
-
-            } else {
-
-                true
-            }
+            NotificationManagerCompat
+                .from(this)
+                .areNotificationsEnabled()
     }
 
 

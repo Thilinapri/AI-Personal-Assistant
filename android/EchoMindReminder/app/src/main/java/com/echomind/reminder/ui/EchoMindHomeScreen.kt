@@ -293,7 +293,11 @@ private fun StatusCard(
 
                     Text(
                         text =
-                            "Ready",
+                            if (notificationsEnabled) {
+                                "Ready"
+                            } else {
+                                "Notifications Off"
+                            },
                         color =
                             Navy,
                         fontSize =
@@ -304,7 +308,11 @@ private fun StatusCard(
 
                     Text(
                         text =
-                            "Ready to receive reminders",
+                            if (notificationsEnabled) {
+                                "Notifications are enabled."
+                            } else {
+                                "Enable notifications to receive reminders."
+                            },
                         color =
                             Slate,
                         fontSize =
@@ -321,7 +329,7 @@ private fun StatusCard(
                             )
                             .background(
                                 color =
-                                    GreenSoft,
+                                    if (notificationsEnabled) GreenSoft else Color(0xFFFFF7ED),
                                 shape =
                                     CircleShape,
                             ),
@@ -337,7 +345,7 @@ private fun StatusCard(
                                 )
                                 .background(
                                     color =
-                                        Green,
+                                        if (notificationsEnabled) Green else Color(0xFFD97706),
                                     shape =
                                         CircleShape,
                                 ),
@@ -367,7 +375,7 @@ private fun StatusCard(
                             )
                             .background(
                                 color =
-                                    Green,
+                                    if (notificationsEnabled) Green else Color(0xFFD97706),
                                 shape =
                                     CircleShape,
                             ),

@@ -609,11 +609,15 @@ export default function DashboardPage() {
 
               <div>
                 <h3 className="text-sm font-bold text-amber-950">
-                  EchoMind backend is offline
+                  EchoMind is offline
                 </h3>
 
                 <p className="mt-1 text-xs leading-relaxed text-amber-800">
-                  Start the Python EchoMind application and refresh this dashboard.
+                  Unable to connect right now. Please make sure EchoMind is turned on and connected.
+                </p>
+
+                <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                  We'll reconnect automatically when it's available.
                 </p>
               </div>
 

@@ -148,7 +148,7 @@ class AudioWorker:
 
             result = self.memory_engine.process(
                 mode="immediate",
-                text=context,
+                sentences=context,
                 current_time=datetime.now(),
             )
 

@@ -1,0 +1,24 @@
+{"text":"Her doctor confirmed that the illness will require continued treatment.","label":1,"category":"HEALTH"}
+{"text":"He takes prescribed medication every night because of his condition.","label":1,"category":"HEALTH"}
+{"text":"The test showed that she has a chronic health problem.","label":1,"category":"HEALTH"}
+{"text":"My therapist said my anxiety symptoms have become more serious.","label":1,"category":"HEALTH"}
+{"text":"She owes a significant amount of money to the bank.","label":1,"category":"FINANCIAL"}
+{"text":"His current income is not enough to cover his monthly expenses.","label":1,"category":"FINANCIAL"}
+{"text":"There is less than five thousand rupees remaining in my account.","label":1,"category":"FINANCIAL"}
+{"text":"I am having difficulty making the payments on my loan.","label":1,"category":"FINANCIAL"}
+{"text":"She asked us not to reveal the exact place where she lives.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"The location of my house is information I want kept confidential.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"The document contains details that establish his legal identity.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"Information in this record could be used to identify her personally.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"I have a dentist appointment on Thursday morning.","label":0,"category":"SAFE"}
+{"text":"Remind me to collect my medicine from the pharmacy tomorrow.","label":0,"category":"SAFE"}
+{"text":"I need to meet the finance team at three PM.","label":0,"category":"SAFE"}
+{"text":"My salary review meeting has been moved to Friday.","label":0,"category":"SAFE"}
+{"text":"I am going to the bank after work today.","label":0,"category":"SAFE"}
+{"text":"Remember to submit my passport application on Monday.","label":0,"category":"SAFE"}
+{"text":"My ID card appointment is scheduled for next week.","label":0,"category":"SAFE"}
+{"text":"I need to test the location feature before the presentation.","label":0,"category":"SAFE"}
+{"text":"My project meeting starts at ten tomorrow morning.","label":0,"category":"SAFE"}
+{"text":"I want to buy coffee before going to class.","label":0,"category":"SAFE"}
+{"text":"Remind me to call the lecturer this afternoon.","label":0,"category":"SAFE"}
+{"text":"I prefer working in the library during the evening.","label":0,"category":"SAFE"}

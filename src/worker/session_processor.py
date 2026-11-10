@@ -81,12 +81,15 @@ class SessionProcessor:
         if not entries:
             return False
 
-        text = "\n".join(entry["text"] for entry in entries)
+        sentences = [
+            entry["text"]
+            for entry in entries
+        ]
 
         try:
             response = self.memory_engine.process(
                 mode="summary",
-                text=text,
+                sentences=sentences,
                 current_time=datetime.now(),
             )
         except Exception as error:

@@ -140,6 +140,7 @@ async function clearAllMemories() {
         }
 
         await loadMemories();
+        await loadMemoryHistory();
         await loadReminders();
 
         const resultsContainer =
@@ -189,6 +190,59 @@ async function loadMemories() {
                 document.createElement("div");
 
             card.className = "memory-card";
+
+            const lifecycleBadges =
+                document.createElement("div");
+
+            lifecycleBadges.className =
+                "lifecycle-badges";
+
+            const activeBadge =
+                document.createElement("span");
+
+            activeBadge.className =
+                "lifecycle-badge";
+
+            activeBadge.textContent =
+                "ACTIVE";
+
+            lifecycleBadges.appendChild(
+                activeBadge
+            );
+
+            if (memory.supersedes_id !== null) {
+                const updatedBadge =
+                    document.createElement("span");
+
+                updatedBadge.className =
+                    "lifecycle-badge";
+
+                updatedBadge.textContent =
+                    "UPDATED";
+
+                lifecycleBadges.appendChild(
+                    updatedBadge
+                );
+            }
+
+            if (memory.seen_count > 1) {
+                const duplicateBadge =
+                    document.createElement("span");
+
+                duplicateBadge.className =
+                    "lifecycle-badge";
+
+                duplicateBadge.textContent =
+                    `DUPLICATE SEEN ×${memory.seen_count}`;
+
+                lifecycleBadges.appendChild(
+                    duplicateBadge
+                );
+            }
+
+            card.appendChild(
+                lifecycleBadges
+            );
 
             const title =
                 document.createElement("h3");
@@ -268,6 +322,15 @@ async function loadMemories() {
                 )
             );
 
+            if (memory.supersedes_id !== null) {
+                card.appendChild(
+                    createDetailRow(
+                        "Relationship",
+                        `Updated previous memory #${memory.supersedes_id}`
+                    )
+                );
+            }
+
             const actions =
                 document.createElement("div");
 
@@ -285,6 +348,120 @@ async function loadMemories() {
     } catch (error) {
         console.error(
             "Memory loading failed:",
+            error
+        );
+    }
+}
+
+
+async function loadMemoryHistory() {
+    try {
+        const response = await fetch(
+            "/api/memories/history"
+        );
+
+        const memories = await response.json();
+
+        const historyList =
+            document.getElementById(
+                "memory-history-list"
+            );
+
+        historyList.replaceChildren();
+
+        if (memories.length === 0) {
+            historyList.textContent =
+                "No superseded memories yet.";
+
+            return;
+        }
+
+        memories.forEach((memory) => {
+            const card =
+                document.createElement("div");
+
+            card.className =
+                "memory-card";
+
+            const lifecycleBadges =
+                document.createElement("div");
+
+            lifecycleBadges.className =
+                "lifecycle-badges";
+
+            const supersededBadge =
+                document.createElement("span");
+
+            supersededBadge.className =
+                "lifecycle-badge";
+
+            supersededBadge.textContent =
+                "SUPERSEDED";
+
+            lifecycleBadges.appendChild(
+                supersededBadge
+            );
+
+            card.appendChild(
+                lifecycleBadges
+            );
+
+            const title =
+                document.createElement("h3");
+
+            title.textContent =
+                memory.title;
+
+            const content =
+                document.createElement("p");
+
+            content.textContent =
+                memory.content;
+
+            card.appendChild(title);
+            card.appendChild(content);
+
+            card.appendChild(
+                createDetailRow(
+                    "Category",
+                    memory.category
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Date",
+                    memory.date || "-"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Time",
+                    memory.time || "-"
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Status",
+                    memory.status
+                )
+            );
+
+            card.appendChild(
+                createDetailRow(
+                    "Seen",
+                    `${memory.seen_count} time(s)`
+                )
+            );
+
+            historyList.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error(
+            "Failed to load memory history:",
             error
         );
     }
@@ -377,12 +554,49 @@ async function loadReminders() {
                 )
             );
 
-            card.appendChild(
-                createDetailRow(
-                    "Status",
-                    reminder.status
-                )
-            );
+            const statusBadges =
+                document.createElement("div");
+
+            statusBadges.className =
+                "lifecycle-badges";
+
+            const statusBadge =
+                document.createElement("span");
+
+            statusBadge.className =
+                `lifecycle-badge reminder-status-${reminder.status}`;
+
+            statusBadge.textContent =
+                reminder.status.toUpperCase();
+
+            statusBadges.appendChild(statusBadge);
+            card.appendChild(statusBadges);
+
+            if (reminder.status === "pending") {
+
+                const actions =
+                    document.createElement("div");
+
+                actions.className =
+                    "memory-actions";
+
+                const cancelButton =
+                    document.createElement("button");
+
+                cancelButton.className =
+                    "delete-memory-button";
+
+                cancelButton.textContent =
+                    "Cancel Reminder";
+
+                cancelButton.addEventListener(
+                    "click",
+                    () => cancelReminder(reminder.id)
+                );
+
+                actions.appendChild(cancelButton);
+                card.appendChild(actions);
+            }
 
             reminderList.appendChild(card);
         });
@@ -397,6 +611,51 @@ async function loadReminders() {
             "reminder-list"
         ).textContent =
             "Failed to load reminders.";
+    }
+}
+
+
+async function cancelReminder(reminderId) {
+
+    const confirmed = confirm(
+        "Cancel this reminder?"
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/api/reminders/${reminderId}/cancel`,
+            {
+                method: "POST",
+            }
+        );
+
+        if (!response.ok) {
+
+            const errorData =
+                await response.json();
+
+            throw new Error(
+                errorData.error
+                || "Reminder cancellation failed"
+            );
+        }
+
+        await loadReminders();
+
+    } catch (error) {
+
+        console.error(
+            "Reminder cancellation failed:",
+            error
+        );
+
+        alert(
+            `Failed to cancel reminder: ${error.message}`
+        );
     }
 }
 
@@ -611,6 +870,7 @@ async function saveMemoryEdit(
         }
 
         await loadMemories();
+        await loadMemoryHistory();
         await loadReminders();
 
         const searchResults =
@@ -657,6 +917,7 @@ async function deleteMemory(memoryId) {
         }
 
         loadMemories();
+        loadMemoryHistory();
         loadReminders();
 
     } catch (error) {
@@ -788,6 +1049,7 @@ document
 
 loadStatus();
 loadMemories();
+loadMemoryHistory();
 loadReminders();
 
 // Keep dashboard status and reminders up to date.

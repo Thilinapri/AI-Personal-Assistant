@@ -399,6 +399,36 @@ class Database:
 
             return cursor.fetchall()
 
+    def get_superseded_memories(self):
+        """Return memories that have been replaced by newer information."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT
+                    id,
+                    category,
+                    title,
+                    content,
+                    date,
+                    time,
+                    notification,
+                    processed,
+                    created_at,
+                    status,
+                    updated_at,
+                    last_seen_at,
+                    seen_count,
+                    supersedes_id,
+                    embedding,
+                    embedding_model
+                FROM memories
+                WHERE status = 'superseded'
+                ORDER BY id DESC
+            """)
+
+            return cursor.fetchall()
+
     def increment_seen(self, memory_id):
         """Record that an existing memory was observed again."""
 
@@ -503,6 +533,29 @@ class Database:
 
             return cursor.fetchall()
 
+    def get_pending_reminder_ids_for_memory(
+        self,
+        memory_id,
+    ):
+        """Return pending reminder IDs linked to one memory."""
+
+        with self.lock:
+
+            cursor = self.connection.execute("""
+                SELECT id
+                FROM reminders
+                WHERE memory_id = ?
+                  AND status = 'pending'
+                ORDER BY id
+            """, (
+                memory_id,
+            ))
+
+            return [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
     def cancel_pending_reminders_for_memory(self, memory_id):
         """Cancel pending reminders linked to an outdated memory."""
 
@@ -516,6 +569,22 @@ class Database:
                     WHERE memory_id = ?
                       AND status = 'pending'
                 """, (memory_id,))
+
+    def cancel_reminder(self, reminder_id):
+        """Cancel one pending reminder by ID."""
+
+        with self.lock:
+
+            with self.connection:
+
+                cursor = self.connection.execute("""
+                    UPDATE reminders
+                    SET status = 'cancelled'
+                    WHERE id = ?
+                      AND status = 'pending'
+                """, (reminder_id,))
+
+                return cursor.rowcount > 0
 
     def mark_reminder_triggered(
         self,

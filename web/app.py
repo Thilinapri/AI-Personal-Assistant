@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, request
 
+from src.config import MEMORY_SEARCH_MIN_SCORE
 from src.database.database import Database
 from src.memory.embedding_service import EmbeddingService
 from src.memory.memory_manager import MemoryManager
@@ -122,6 +123,31 @@ def create_app(
                     "notification": bool(row[6]),
                     "status": row[9],
                     "seen_count": row[12],
+                    "supersedes_id": row[13],
+                }
+            )
+
+        return jsonify(result)
+
+    @app.route("/api/memories/history")
+    def memory_history():
+        rows = database.get_superseded_memories()
+
+        result = []
+
+        for row in rows:
+            result.append(
+                {
+                    "id": row[0],
+                    "category": row[1],
+                    "title": row[2],
+                    "content": row[3],
+                    "date": row[4],
+                    "time": row[5],
+                    "notification": bool(row[6]),
+                    "status": row[9],
+                    "seen_count": row[12],
+                    "supersedes_id": row[13],
                 }
             )
 
@@ -129,6 +155,7 @@ def create_app(
 
     @app.route("/api/memories", methods=["DELETE"])
     def clear_memories():
+        reminder_manager.cancel_all_pending()
         database.delete_all_memories()
 
         return jsonify(
@@ -140,7 +167,12 @@ def create_app(
 
     @app.route("/api/memories/<int:memory_id>", methods=["DELETE"])
     def delete_memory(memory_id):
-        database.delete_memory(memory_id)
+        reminder_manager.cancel_for_memory(
+            memory_id
+        )
+        database.delete_memory(
+            memory_id
+        )
 
         return jsonify(
             {
@@ -258,6 +290,31 @@ def create_app(
 
         return jsonify(result)
 
+    @app.route(
+        "/api/reminders/<int:reminder_id>/cancel",
+        methods=["POST"],
+    )
+    def cancel_reminder(reminder_id):
+
+        cancelled = reminder_manager.cancel_reminder(
+            reminder_id
+        )
+
+        if not cancelled:
+            return jsonify(
+                {
+                    "error":
+                        "Pending reminder not found."
+                }
+            ), 404
+
+        return jsonify(
+            {
+                "success": True,
+                "reminder_id": reminder_id,
+            }
+        )
+
     @app.route("/api/memories/search")
     def search_memories():
         query = request.args.get("q", "").strip()
@@ -268,6 +325,7 @@ def create_app(
         results = retrieval_service.search(
             query,
             limit=5,
+            min_score=MEMORY_SEARCH_MIN_SCORE,
         )
 
         return jsonify(results)

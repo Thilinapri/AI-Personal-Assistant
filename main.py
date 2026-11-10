@@ -1,3 +1,4 @@
+import logging
 import queue
 import sys
 import threading
@@ -11,8 +12,14 @@ from src.ai.keyword_filter import KeywordFilter
 from src.ai.memory_engine import MemoryEngine
 from src.ai.disabled_memory_engine import DisabledMemoryEngine
 from src.ai.transcript_buffer import TranscriptBuffer
+
 from src.database.database import Database
-from src.config import ENABLE_GEMINI
+
+from src.config import (
+    ENABLE_GEMINI,
+    ENABLE_PRIVACY_GATEWAY,
+    ENABLE_SEMANTIC_PRIVACY,
+)
 
 from src.memory.memory_manager import MemoryManager
 from src.memory.embedding_service import EmbeddingService
@@ -21,7 +28,17 @@ from src.memory.rule_based_relationship_classifier import (
     RuleBasedRelationshipClassifier,
 )
 
+from src.privacy.context_selector import ContextSelector
+from src.privacy.privacy_gateway import PrivacyGateway
+from src.privacy.semantic_privacy_classifier import (
+    SemanticPrivacyClassifier,
+)
+
 from src.reminder.reminder_manager import ReminderManager
+
+from src.cloud.reminder_sync_client import (
+    CloudReminderSyncClient,
+)
 
 from src.worker.audio_worker import AudioWorker
 from src.worker.audio_chunker import AudioChunker
@@ -33,13 +50,26 @@ from web.server import WebServer
 
 
 def configure_console_output():
-    """Prevent unsupported console characters from stopping the application."""
+    """Configure clean console output."""
 
-    for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure"):
+    for stream in (
+        sys.stdout,
+        sys.stderr,
+    ):
+        if hasattr(
+            stream,
+            "reconfigure",
+        ):
             stream.reconfigure(
                 errors="backslashreplace"
             )
+
+    # Hide normal Flask/Werkzeug HTTP request logs.
+    logging.getLogger(
+        "werkzeug"
+    ).setLevel(
+        logging.ERROR
+    )
 
 
 def shutdown_components(
@@ -57,21 +87,22 @@ def shutdown_components(
 
     print("\nStopping Assistant...")
 
-    # Stop microphone capture first.
+    # Stop microphone/audio collection first.
     audio_chunker.stop()
     audio_chunker.join()
 
     # Stop periodic session processing.
     session_processor.stop()
 
-    # Prevent AudioWorker from processing any more queued audio.
+    # Prevent AudioWorker from processing more audio.
     worker.stop()
 
-    # Remove any audio chunks that are still waiting.
+    # Remove audio chunks still waiting.
     while True:
         try:
             audio_queue.get_nowait()
             audio_queue.task_done()
+
         except queue.Empty:
             break
 
@@ -82,11 +113,11 @@ def shutdown_components(
     session_processor.join()
     worker_thread.join()
 
-    # Stop reminder checking before closing the database.
+    # Stop reminder checking before closing database.
     reminder_worker.stop()
     reminder_worker.join()
 
-    # Stop the dashboard before closing the shared database.
+    # Stop dashboard before closing shared database.
     web_server.stop()
     web_server.join()
 
@@ -117,6 +148,70 @@ def main():
 
     embedding_service = EmbeddingService()
 
+    # ---------------------------------
+    # Context Selection
+    # ---------------------------------
+
+    context_selector = ContextSelector(
+        embedding_service=embedding_service,
+    )
+
+    # ---------------------------------
+    # Optional Privacy Components
+    # ---------------------------------
+
+    privacy_gateway = None
+    semantic_privacy_classifier = None
+
+    if ENABLE_PRIVACY_GATEWAY:
+
+        if ENABLE_SEMANTIC_PRIVACY:
+            semantic_privacy_classifier = (
+                SemanticPrivacyClassifier(
+                    embedding_service=(
+                        embedding_service
+                    ),
+                )
+            )
+
+        privacy_gateway = PrivacyGateway(
+            context_selector=(
+                context_selector
+            ),
+            semantic_classifier=(
+                semantic_privacy_classifier
+            ),
+        )
+
+        print(
+            "🔒 Privacy Gateway enabled."
+        )
+
+        if ENABLE_SEMANTIC_PRIVACY:
+            print(
+                "🧠 Semantic privacy screening enabled."
+            )
+        else:
+            print(
+                "🧠 Semantic privacy screening disabled."
+            )
+
+    else:
+
+        print(
+            "🔓 Privacy Gateway disabled."
+        )
+
+        if ENABLE_SEMANTIC_PRIVACY:
+            print(
+                "⚠️ Semantic privacy setting ignored "
+                "because Privacy Gateway is disabled."
+            )
+
+    # ---------------------------------
+    # Retrieval
+    # ---------------------------------
+
     retrieval_service = RetrievalService(
         database=database,
         embedding_service=embedding_service,
@@ -127,11 +222,39 @@ def main():
     )
 
     # ---------------------------------
+    # Optional Cloud Reminder Sync
+    # ---------------------------------
+
+    cloud_sync_client = None
+
+    try:
+        cloud_sync_client = (
+            CloudReminderSyncClient()
+        )
+
+        print(
+            "☁️ Cloud reminder sync enabled."
+        )
+
+    except Exception as error:
+
+        # EchoMind must continue working locally
+        # even when cloud synchronization has not
+        # been configured or cannot initialize.
+        print(
+            "☁️ Cloud reminder sync disabled: "
+            f"{error}"
+        )
+
+    # ---------------------------------
     # Reminder Manager
     # ---------------------------------
 
     reminder_manager = ReminderManager(
         database=database,
+        cloud_sync_client=(
+            cloud_sync_client
+        ),
     )
 
     # ---------------------------------
@@ -142,7 +265,9 @@ def main():
         database=database,
         embedding_service=embedding_service,
         retrieval_service=retrieval_service,
-        relationship_classifier=relationship_classifier,
+        relationship_classifier=(
+            relationship_classifier
+        ),
         reminder_manager=reminder_manager,
     )
 
@@ -152,18 +277,21 @@ def main():
 
     try:
         backfilled_count = (
-            memory_manager.backfill_missing_embeddings()
+            memory_manager
+            .backfill_missing_embeddings()
         )
 
         if backfilled_count > 0:
             print(
-                f"🧠 Prepared {backfilled_count} existing "
+                f"🧠 Prepared "
+                f"{backfilled_count} existing "
                 "memories for semantic search."
             )
 
     except Exception as error:
         print(
-            f"Memory embedding backfill failed: {error}"
+            "Memory embedding backfill failed: "
+            f"{error}"
         )
 
     # ---------------------------------
@@ -196,12 +324,20 @@ def main():
     transcript_buffer = TranscriptBuffer()
 
     if ENABLE_GEMINI:
-        memory_engine = MemoryEngine()
+
+        memory_engine = MemoryEngine(
+            privacy_gateway=privacy_gateway,
+            context_selector=context_selector,
+        )
+
         print(
             "🤖 Gemini memory processing enabled."
         )
+
     else:
+
         memory_engine = DisabledMemoryEngine()
+
         print(
             "🤖 Gemini memory processing disabled."
         )
@@ -251,6 +387,8 @@ def main():
     # Session Processor
     # ---------------------------------
 
+    # Keep the normal SessionProcessor
+    # interval unchanged.
     session_processor = SessionProcessor(
         transcript_buffer=transcript_buffer,
         memory_engine=memory_engine,

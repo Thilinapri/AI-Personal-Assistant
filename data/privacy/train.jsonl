@@ -1,0 +1,48 @@
+{"text":"My diabetes has been getting worse recently.","label":1,"category":"HEALTH"}
+{"text":"I take insulin every morning for my condition.","label":1,"category":"HEALTH"}
+{"text":"The doctor told me that my blood pressure is too high.","label":1,"category":"HEALTH"}
+{"text":"I was diagnosed with depression last year.","label":1,"category":"HEALTH"}
+{"text":"My asthma symptoms have become more severe this month.","label":1,"category":"HEALTH"}
+{"text":"I have been taking medication for anxiety.","label":1,"category":"HEALTH"}
+{"text":"The doctor increased the dosage of my medicine.","label":1,"category":"HEALTH"}
+{"text":"My test results showed that I have a medical condition.","label":1,"category":"HEALTH"}
+{"text":"My bank balance is almost empty.","label":1,"category":"FINANCIAL"}
+{"text":"I earn about 180000 rupees every month.","label":1,"category":"FINANCIAL"}
+{"text":"I still owe a large amount of money on my credit card.","label":1,"category":"FINANCIAL"}
+{"text":"My savings have dropped significantly this year.","label":1,"category":"FINANCIAL"}
+{"text":"I borrowed money because I cannot cover my expenses.","label":1,"category":"FINANCIAL"}
+{"text":"My monthly income was reduced recently.","label":1,"category":"FINANCIAL"}
+{"text":"I have a personal loan that I am struggling to repay.","label":1,"category":"FINANCIAL"}
+{"text":"There is only a small amount of money left in my account.","label":1,"category":"FINANCIAL"}
+{"text":"I do not want other people knowing exactly where I live.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"My home location should remain private.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"I moved to a new house and I do not want the location shared.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"Please keep the place where I live confidential.","label":1,"category":"PRIVATE_LOCATION"}
+{"text":"These are my personal identification details.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"This information can uniquely identify me.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"My legal identity information should remain private.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"Those details belong to my official identity.","label":1,"category":"PERSONAL_IDENTITY"}
+{"text":"The diabetes awareness seminar starts on Monday.","label":0,"category":"SAFE"}
+{"text":"The hospital cafeteria closes at eight tonight.","label":0,"category":"SAFE"}
+{"text":"Remind me about my doctor appointment on Tuesday.","label":0,"category":"SAFE"}
+{"text":"The medical research presentation is next Friday.","label":0,"category":"SAFE"}
+{"text":"The bank closes at four this afternoon.","label":0,"category":"SAFE"}
+{"text":"Schedule a meeting with the finance team on Monday.","label":0,"category":"SAFE"}
+{"text":"The salary review meeting is next Tuesday.","label":0,"category":"SAFE"}
+{"text":"I need to submit the finance assignment tomorrow.","label":0,"category":"SAFE"}
+{"text":"The credit card design needs to be updated in the application.","label":0,"category":"SAFE"}
+{"text":"The savings feature is part of our software project.","label":0,"category":"SAFE"}
+{"text":"The account settings page needs a redesign.","label":0,"category":"SAFE"}
+{"text":"Book a meeting room for the budget discussion.","label":0,"category":"SAFE"}
+{"text":"Meet the project team at Colombo Fort at six PM.","label":0,"category":"SAFE"}
+{"text":"The location services module needs more testing.","label":0,"category":"SAFE"}
+{"text":"The office moved to a new building last month.","label":0,"category":"SAFE"}
+{"text":"Remember to bring the address form to the meeting.","label":0,"category":"SAFE"}
+{"text":"The identity management feature needs another test.","label":0,"category":"SAFE"}
+{"text":"Submit the passport application next week.","label":0,"category":"SAFE"}
+{"text":"The ID card office opens at eight AM.","label":0,"category":"SAFE"}
+{"text":"The authentication team has a meeting tomorrow.","label":0,"category":"SAFE"}
+{"text":"Remind me to submit the assignment tomorrow.","label":0,"category":"SAFE"}
+{"text":"I prefer coffee instead of tea.","label":0,"category":"SAFE"}
+{"text":"Call the supervisor tomorrow afternoon.","label":0,"category":"SAFE"}
+{"text":"Buy milk and bread on the way home.","label":0,"category":"SAFE"}

@@ -47,6 +47,23 @@ section {
     background: #fafafa;
 }
 
+.lifecycle-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.lifecycle-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f3f4f6;
+}
+
 .memory-card h3 {
     margin-top: 0;
 }
@@ -120,4 +137,54 @@ section {
     border: none;
     border-radius: 8px;
     cursor: pointer;
+}
+
+.reminder-status-pending {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+
+.reminder-status-triggered {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+    color: #065f46;
+}
+
+.reminder-status-cancelled {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #4b5563;
+}
+
+.dashboard > h1 {
+    margin-bottom: 4px;
+    font-size: 32px;
+}
+
+.dashboard > h1 + p {
+    margin-top: 0;
+    margin-bottom: 28px;
+    color: #6b7280;
+}
+
+section {
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+section h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.memory-card {
+    transition:
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
+}
+
+.memory-card:hover {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
 }

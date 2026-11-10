@@ -1,0 +1,725 @@
+import {
+  ApiCancelReminderResponse,
+  ApiMemoriesResponse,
+  ApiMemoryHistoryResponse,
+  ApiRemindersResponse,
+  ApiSearchResponse,
+  ApiStatusResponse,
+  Memory,
+  MemorySearchResult,
+  Reminder,
+  SystemStatus,
+  ApiListeningResponse,
+  ApiMemoryMutationResponse,
+  MemoryUpdatePayload,
+} from "@/types/api";
+
+/**
+ * EchoMind Flask Backend Server-Side Client.
+ *
+ * This client runs strictly on the server-side (Route Handlers / Server Components)
+ * and proxies requests to the local Flask REST API.
+ * Browser components NEVER call Flask directly and never expose ECHOMIND_API_URL.
+ */
+function getBackendUrl(): string {
+  return process.env.ECHOMIND_API_URL || "http://127.0.0.1:5000";
+}
+
+/**
+ * Fetch system status from Flask REST API GET /api/status.
+ * Gracefully handles offline states, timeouts, and network errors.
+ */
+export async function fetchBackendStatus(): Promise<ApiStatusResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/status`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as SystemStatus;
+
+    return {
+      available: true,
+      status: data,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Fetch active memories from Flask REST API GET /api/memories.
+ * Gracefully handles offline states, timeouts, and network errors.
+ */
+export async function fetchBackendMemories(): Promise<ApiMemoriesResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/memories`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as Memory[];
+
+    return {
+      available: true,
+      memories: Array.isArray(data) ? data : [],
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Fetch superseded memories from Flask REST API GET /api/memories/history.
+ * Gracefully handles offline states, timeouts, and network errors.
+ */
+export async function fetchBackendMemoryHistory(): Promise<ApiMemoryHistoryResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/memories/history`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as Memory[];
+
+    return {
+      available: true,
+      memories: Array.isArray(data) ? data : [],
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Search active memories semantically using Flask REST API GET /api/memories/search?q=<query>.
+ * If query is empty or whitespace only, returns empty list without calling Flask.
+ */
+export async function fetchBackendMemorySearch(
+  query: string
+): Promise<ApiSearchResponse> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return {
+      available: true,
+      results: [],
+      query: "",
+    };
+  }
+
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/memories/search?q=${encodeURIComponent(trimmed)}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+        query: trimmed,
+      };
+    }
+
+    const data = (await response.json()) as MemorySearchResult[];
+
+    return {
+      available: true,
+      results: Array.isArray(data) ? data : [],
+      query: trimmed,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+      query: trimmed,
+    };
+  }
+}
+
+/**
+ * Fetch all reminders from Flask REST API GET /api/reminders.
+ * Gracefully handles offline states, timeouts, and network errors.
+ */
+export async function fetchBackendReminders(): Promise<ApiRemindersResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/reminders`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        available: false,
+        error: `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as Reminder[];
+
+    return {
+      available: true,
+      reminders: Array.isArray(data) ? data : [],
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Cancel a pending reminder via Flask REST API POST /api/reminders/<id>/cancel.
+ * Distinguishes backend availability from operation-level cancellation rejection (404).
+ */
+export async function cancelBackendReminder(
+  id: number
+): Promise<ApiCancelReminderResponse> {
+  const baseUrl = getBackendUrl();
+  const endpoint = `${baseUrl}/api/reminders/${id}/cancel`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    // If 404, the Flask backend is available, but the reminder is not pending or not found
+    if (response.status === 404) {
+      const errorJson = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      return {
+        available: true,
+        success: false,
+        reminder_id: id,
+        error: errorJson?.error || "Pending reminder not found.",
+      };
+    }
+
+    if (!response.ok) {
+      const errorJson = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      return {
+        available: true,
+        success: false,
+        reminder_id: id,
+        error:
+          errorJson?.error ||
+          `Backend responded with HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = (await response.json()) as {
+      success: boolean;
+      reminder_id: number;
+    };
+
+    return {
+      available: true,
+      success: data.success,
+      reminder_id: data.reminder_id,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error
+        ? err.name === "AbortError"
+          ? `Connection to Flask API timed out at ${baseUrl}`
+          : err.message
+        : "Failed to connect to Flask API";
+
+    return {
+      available: false,
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+export async function updateBackendListening(
+  enabled: boolean,
+): Promise<ApiListeningResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/listening`;
+
+  try {
+    const controller =
+      new AbortController();
+
+    const timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        3500,
+      );
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "POST",
+
+          signal:
+            controller.signal,
+
+          headers: {
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify({
+              enabled,
+            }),
+
+          cache:
+            "no-store",
+        },
+      );
+
+    clearTimeout(
+      timeoutId,
+    );
+
+    if (!response.ok) {
+      const errorJson =
+        await response
+          .json()
+          .catch(
+            () => null,
+          ) as {
+            error?: string;
+          } | null;
+
+      return {
+        available: true,
+        success: false,
+
+        error:
+          errorJson?.error ||
+          `Backend responded with HTTP ${response.status}`,
+      };
+    }
+
+    const data =
+      await response.json() as {
+        success: boolean;
+        listening: string;
+      };
+
+    return {
+      available: true,
+      success:
+        data.success,
+
+      listening:
+        data.listening,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to update listening state.";
+
+    return {
+      available: false,
+      success: false,
+      error: message,
+    };
+  }
+}
+
+
+export async function updateBackendMemory(
+  memoryId: number,
+  memory: MemoryUpdatePayload,
+): Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories/${memoryId}`;
+
+  try {
+    const controller =
+      new AbortController();
+
+    const timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        5000,
+      );
+
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method: "PUT",
+
+          signal:
+            controller.signal,
+
+          headers: {
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body:
+            JSON.stringify(
+              memory,
+            ),
+
+          cache:
+            "no-store",
+        },
+      );
+
+    clearTimeout(
+      timeoutId,
+    );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          memory_id?: number;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          `Backend responded with HTTP ${response.status}`,
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      memory_id:
+        data?.memory_id ??
+        memoryId,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Memory update failed.",
+    };
+  }
+}
+
+
+export async function deleteBackendMemory(
+  memoryId: number,
+): Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories/${memoryId}`;
+
+  try {
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method:
+            "DELETE",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+
+          cache:
+            "no-store",
+        },
+      );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          memory_id?: number;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          "Memory deletion failed.",
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      memory_id:
+        data?.memory_id ??
+        memoryId,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Memory deletion failed.",
+    };
+  }
+}
+
+
+export async function clearBackendMemories():
+Promise<ApiMemoryMutationResponse> {
+  const baseUrl =
+    getBackendUrl();
+
+  const endpoint =
+    `${baseUrl}/api/memories`;
+
+  try {
+    const response =
+      await fetch(
+        endpoint,
+        {
+          method:
+            "DELETE",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+
+          cache:
+            "no-store",
+        },
+      );
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => null,
+        ) as {
+          success?: boolean;
+          message?: string;
+          error?: string;
+        } | null;
+
+    if (!response.ok) {
+      return {
+        available: true,
+        success: false,
+
+        error:
+          data?.error ||
+          "Unable to clear memories.",
+      };
+    }
+
+    return {
+      available: true,
+
+      success:
+        data?.success === true,
+
+      message:
+        data?.message,
+    };
+
+  } catch (
+    error: unknown
+  ) {
+    return {
+      available: false,
+      success: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to clear memories.",
+    };
+  }
+}

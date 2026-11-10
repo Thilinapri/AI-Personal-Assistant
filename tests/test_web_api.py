@@ -2,12 +2,20 @@ import unittest
 
 from src.database.database import Database
 from web.app import create_app
+from src.reminder.reminder_manager import ReminderManager
 
 
 class FakeRetrievalService:
     """Small test replacement for semantic retrieval."""
 
-    def search(self, query, limit=5):
+    def search(
+        self,
+        query,
+        limit=5,
+        min_score=None,
+    ):
+        self.last_min_score = min_score
+
         return [
             {
                 "id": 1,
@@ -36,6 +44,10 @@ class WebApiTests(unittest.TestCase):
     def setUp(self):
         self.database = Database(":memory:")
 
+        self.reminder_manager = ReminderManager(
+            database=self.database,
+        )
+
         self.retrieval_service = (
             FakeRetrievalService()
         )
@@ -48,7 +60,7 @@ class WebApiTests(unittest.TestCase):
             database=self.database,
             embedding_service=object(),
             retrieval_service=self.retrieval_service,
-            reminder_manager=object(),
+            reminder_manager=self.reminder_manager,
             memory_manager=self.memory_manager,
         )
 
@@ -205,6 +217,105 @@ class WebApiTests(unittest.TestCase):
             "active",
         )
 
+        self.assertIn(
+            "supersedes_id",
+            memories[0],
+        )
+
+        self.assertIsNone(
+            memories[0]["supersedes_id"],
+        )
+
+    def test_memories_endpoint_exposes_supersedes_relationship(self):
+        old_memory_id = self.create_test_memory(
+            title="Original meeting"
+        )
+
+        updated_memory = {
+            "category": "Task",
+            "title": "Updated meeting",
+            "content": "Updated meeting details.",
+            "date": "2099-01-01",
+            "time": "11:00",
+            "notification": False,
+        }
+
+        new_memory_id = self.database.replace_memory(
+            old_memory_id,
+            updated_memory,
+        )
+
+        response = self.client.get(
+            "/api/memories"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        memories = response.get_json()
+
+        self.assertEqual(
+            len(memories),
+            1,
+        )
+
+        self.assertEqual(
+            memories[0]["id"],
+            new_memory_id,
+        )
+
+        self.assertEqual(
+            memories[0]["supersedes_id"],
+            old_memory_id,
+        )
+
+    def test_memory_history_endpoint_returns_superseded_memories(self):
+        old_memory_id = self.create_test_memory(
+            title="Original appointment"
+        )
+
+        updated_memory = {
+            "category": "Task",
+            "title": "Updated appointment",
+            "content": "Updated appointment details.",
+            "date": "2099-01-01",
+            "time": "11:00",
+            "notification": False,
+        }
+
+        self.database.replace_memory(
+            old_memory_id,
+            updated_memory,
+        )
+
+        response = self.client.get(
+            "/api/memories/history"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        memories = response.get_json()
+
+        self.assertEqual(
+            len(memories),
+            1,
+        )
+
+        self.assertEqual(
+            memories[0]["id"],
+            old_memory_id,
+        )
+
+        self.assertEqual(
+            memories[0]["status"],
+            "superseded",
+        )
+
     def test_reminders_endpoint(self):
         memory_id = self.create_test_memory(
             title="API reminder"
@@ -246,6 +357,46 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(
             reminders[0]["status"],
             "pending",
+        )
+
+    def test_cancel_reminder_endpoint(self):
+
+        memory_id = self.create_test_memory(
+            title="Cancel reminder test"
+        )
+
+        reminder_id = self.database.create_reminder(
+            memory_id,
+            "2099-01-01 09:30:00",
+        )
+
+        response = self.client.post(
+            f"/api/reminders/{reminder_id}/cancel"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        reminders = (
+            self.database.get_all_reminders()
+        )
+
+        self.assertEqual(
+            len(reminders),
+            1,
+        )
+
+        self.assertEqual(
+            reminders[0][3],
+            "cancelled",
+        )
+
+        self.assertIsNotNone(
+            self.database.get_memory(
+                memory_id
+            )
         )
 
     def test_delete_memory_endpoint(self):
@@ -370,6 +521,11 @@ class WebApiTests(unittest.TestCase):
         self.assertAlmostEqual(
             results[0]["score"],
             0.91,
+        )
+
+        self.assertEqual(
+            self.retrieval_service.last_min_score,
+            0.15,
         )
 
 

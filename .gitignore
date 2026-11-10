@@ -22,3 +22,5 @@ env/
 
 # Audio
 *.wav
+
+results/privacy_gateway_*.csv

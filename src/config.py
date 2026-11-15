@@ -24,7 +24,7 @@ STT_MODEL = "universal-3-5-pro"
 
 # Keep Gemini disabled during development/testing.
 # The API key can remain safely inside .env.
-ENABLE_GEMINI = False
+ENABLE_GEMINI = True
 
 GEMINI_MODEL = "gemini-3.6-flash"
 

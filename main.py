@@ -1,3 +1,4 @@
+
 import logging
 import queue
 import sys
@@ -45,9 +46,16 @@ from src.worker.audio_chunker import AudioChunker
 from src.worker.session_processor import SessionProcessor
 from src.worker.reminder_worker import ReminderWorker
 
+# EchoMind TFT display
+from src.display.display_controller import DisplayWorker
+
 from web.app import create_app
 from web.server import WebServer
 
+
+# ==========================================
+# Console Configuration
+# ==========================================
 
 def configure_console_output():
     """Configure clean console output."""
@@ -56,10 +64,7 @@ def configure_console_output():
         sys.stdout,
         sys.stderr,
     ):
-        if hasattr(
-            stream,
-            "reconfigure",
-        ):
+        if hasattr(stream, "reconfigure"):
             stream.reconfigure(
                 errors="backslashreplace"
             )
@@ -72,11 +77,16 @@ def configure_console_output():
     )
 
 
+# ==========================================
+# Shutdown Components
+# ==========================================
+
 def shutdown_components(
     microphone,
     audio_chunker,
     session_processor,
     reminder_worker,
+    display_worker,
     web_server,
     audio_queue,
     worker,
@@ -117,6 +127,10 @@ def shutdown_components(
     reminder_worker.stop()
     reminder_worker.join()
 
+    # Stop TFT display before closing shared database.
+    display_worker.stop()
+    display_worker.join()
+
     # Stop dashboard before closing shared database.
     web_server.stop()
     web_server.join()
@@ -128,6 +142,10 @@ def shutdown_components(
     print("Assistant stopped.")
 
 
+# ==========================================
+# Main Application
+# ==========================================
+
 def main():
 
     configure_console_output()
@@ -136,29 +154,29 @@ def main():
     print("AI Personal Assistant")
     print("=" * 50)
 
-    # ---------------------------------
+    # --------------------------------------
     # Database
-    # ---------------------------------
+    # --------------------------------------
 
     database = Database()
 
-    # ---------------------------------
+    # --------------------------------------
     # Local Memory AI Components
-    # ---------------------------------
+    # --------------------------------------
 
     embedding_service = EmbeddingService()
 
-    # ---------------------------------
+    # --------------------------------------
     # Context Selection
-    # ---------------------------------
+    # --------------------------------------
 
     context_selector = ContextSelector(
         embedding_service=embedding_service,
     )
 
-    # ---------------------------------
+    # --------------------------------------
     # Optional Privacy Components
-    # ---------------------------------
+    # --------------------------------------
 
     privacy_gateway = None
     semantic_privacy_classifier = None
@@ -168,39 +186,25 @@ def main():
         if ENABLE_SEMANTIC_PRIVACY:
             semantic_privacy_classifier = (
                 SemanticPrivacyClassifier(
-                    embedding_service=(
-                        embedding_service
-                    ),
+                    embedding_service=embedding_service,
                 )
             )
 
         privacy_gateway = PrivacyGateway(
-            context_selector=(
-                context_selector
-            ),
-            semantic_classifier=(
-                semantic_privacy_classifier
-            ),
+            context_selector=context_selector,
+            semantic_classifier=semantic_privacy_classifier,
         )
 
-        print(
-            "🔒 Privacy Gateway enabled."
-        )
+        print("🔒 Privacy Gateway enabled.")
 
         if ENABLE_SEMANTIC_PRIVACY:
-            print(
-                "🧠 Semantic privacy screening enabled."
-            )
+            print("🧠 Semantic privacy screening enabled.")
         else:
-            print(
-                "🧠 Semantic privacy screening disabled."
-            )
+            print("🧠 Semantic privacy screening disabled.")
 
     else:
 
-        print(
-            "🔓 Privacy Gateway disabled."
-        )
+        print("🔓 Privacy Gateway disabled.")
 
         if ENABLE_SEMANTIC_PRIVACY:
             print(
@@ -208,9 +212,9 @@ def main():
                 "because Privacy Gateway is disabled."
             )
 
-    # ---------------------------------
+    # --------------------------------------
     # Retrieval
-    # ---------------------------------
+    # --------------------------------------
 
     retrieval_service = RetrievalService(
         database=database,
@@ -221,82 +225,74 @@ def main():
         RuleBasedRelationshipClassifier()
     )
 
-    # ---------------------------------
+    # --------------------------------------
     # Optional Cloud Reminder Sync
-    # ---------------------------------
+    # --------------------------------------
 
     cloud_sync_client = None
 
     try:
-        cloud_sync_client = (
-            CloudReminderSyncClient()
-        )
 
-        print(
-            "☁️ Cloud reminder sync enabled."
-        )
+        cloud_sync_client = CloudReminderSyncClient()
+
+        print("☁️ Cloud reminder sync enabled.")
 
     except Exception as error:
 
         # EchoMind must continue working locally
-        # even when cloud synchronization has not
-        # been configured or cannot initialize.
+        # even when cloud synchronization is unavailable.
         print(
             "☁️ Cloud reminder sync disabled: "
             f"{error}"
         )
 
-    # ---------------------------------
+    # --------------------------------------
     # Reminder Manager
-    # ---------------------------------
+    # --------------------------------------
 
     reminder_manager = ReminderManager(
         database=database,
-        cloud_sync_client=(
-            cloud_sync_client
-        ),
+        cloud_sync_client=cloud_sync_client,
     )
 
-    # ---------------------------------
+    # --------------------------------------
     # Memory Manager
-    # ---------------------------------
+    # --------------------------------------
 
     memory_manager = MemoryManager(
         database=database,
         embedding_service=embedding_service,
         retrieval_service=retrieval_service,
-        relationship_classifier=(
-            relationship_classifier
-        ),
+        relationship_classifier=relationship_classifier,
         reminder_manager=reminder_manager,
     )
 
-    # ---------------------------------
+    # --------------------------------------
     # Prepare Existing Memories
-    # ---------------------------------
+    # --------------------------------------
 
     try:
+
         backfilled_count = (
-            memory_manager
-            .backfill_missing_embeddings()
+            memory_manager.backfill_missing_embeddings()
         )
 
         if backfilled_count > 0:
             print(
-                f"🧠 Prepared "
-                f"{backfilled_count} existing "
+                f"🧠 Prepared {backfilled_count} existing "
                 "memories for semantic search."
             )
 
     except Exception as error:
+
         print(
             "Memory embedding backfill failed: "
             f"{error}"
         )
 
-    # ---------------------------------
+    # --------------------------------------
     # Reminder Worker
-    # ---------------------------------
+    # --------------------------------------
 
     reminder_worker = ReminderWorker(
         reminder_manager=reminder_manager,
@@ -305,18 +301,29 @@ def main():
 
     reminder_worker.start()
 
-    # ---------------------------------
+    # --------------------------------------
+    # TFT Display Worker
+    # --------------------------------------
+
+    display_worker = DisplayWorker(
+        database=database,
+        refresh_interval=5,
+    )
+
+    display_worker.start()
+
+    # --------------------------------------
     # Microphone
-    # ---------------------------------
+    # --------------------------------------
 
     microphone = Microphone()
     microphone.start()
 
-    # ---------------------------------
+    # --------------------------------------
     # AI Components
-    # ---------------------------------
+    # --------------------------------------
 
-    # AssemblyAI is now used for speech-to-text.
+    # AssemblyAI is used for speech-to-text.
     stt_service = AssemblyAIService()
 
     keyword_filter = KeywordFilter()
@@ -330,29 +337,25 @@ def main():
             context_selector=context_selector,
         )
 
-        print(
-            "🤖 Gemini memory processing enabled."
-        )
+        print("🤖 Gemini memory processing enabled.")
 
     else:
 
         memory_engine = DisabledMemoryEngine()
 
-        print(
-            "🤖 Gemini memory processing disabled."
-        )
+        print("🤖 Gemini memory processing disabled.")
 
-    # ---------------------------------
+    # --------------------------------------
     # Audio Queue
-    # ---------------------------------
+    # --------------------------------------
 
     audio_queue = queue.Queue(
         maxsize=2
     )
 
-    # ---------------------------------
+    # --------------------------------------
     # Audio Worker
-    # ---------------------------------
+    # --------------------------------------
 
     worker = AudioWorker(
         audio_queue=audio_queue,
@@ -371,9 +374,9 @@ def main():
 
     worker_thread.start()
 
-    # ---------------------------------
+    # --------------------------------------
     # Audio Chunker
-    # ---------------------------------
+    # --------------------------------------
 
     audio_chunker = AudioChunker(
         microphone=microphone,
@@ -383,12 +386,11 @@ def main():
 
     audio_chunker.start()
 
-    # ---------------------------------
+    # --------------------------------------
     # Session Processor
-    # ---------------------------------
+    # --------------------------------------
 
-    # Keep the normal SessionProcessor
-    # interval unchanged.
+    # Keep the normal SessionProcessor interval unchanged.
     session_processor = SessionProcessor(
         transcript_buffer=transcript_buffer,
         memory_engine=memory_engine,
@@ -397,9 +399,9 @@ def main():
 
     session_processor.start()
 
-    # ---------------------------------
+    # --------------------------------------
     # Web Dashboard
-    # ---------------------------------
+    # --------------------------------------
 
     web_app = create_app(
         database=database,
@@ -417,14 +419,19 @@ def main():
 
     web_server.start()
 
+    # --------------------------------------
+    # Ready
+    # --------------------------------------
+
     print()
     print("✅ Assistant Ready")
     print("🎧 Continuously listening...")
+    print("🖥️ EchoMind TFT display running.")
     print()
 
-    # ---------------------------------
+    # --------------------------------------
     # Main Loop
-    # ---------------------------------
+    # --------------------------------------
 
     try:
 
@@ -432,6 +439,7 @@ def main():
             threading.Event().wait(1)
 
     except KeyboardInterrupt:
+
         pass
 
     finally:
@@ -441,6 +449,7 @@ def main():
             audio_chunker=audio_chunker,
             session_processor=session_processor,
             reminder_worker=reminder_worker,
+            display_worker=display_worker,
             web_server=web_server,
             audio_queue=audio_queue,
             worker=worker,

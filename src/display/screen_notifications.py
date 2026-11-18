@@ -54,6 +54,47 @@ def load_font(size):
 
 
 # ==========================================
+# Text Wrapping
+# ==========================================
+
+def wrap_text(draw, text, font, max_width):
+
+    words = str(text).split()
+
+    if not words:
+        return []
+
+    lines = []
+    current_line = ""
+
+    for word in words:
+
+        test_line = (
+            word if not current_line
+            else current_line + " " + word
+        )
+
+        bbox = draw.textbbox((0, 0), test_line, font=font)
+        text_width = bbox[2] - bbox[0]
+
+        if text_width <= max_width:
+
+            current_line = test_line
+
+        else:
+
+            if current_line:
+                lines.append(current_line)
+
+            current_line = word
+
+    if current_line:
+        lines.append(current_line)
+
+    return lines
+
+
+# ==========================================
 # Centered Text
 # ==========================================
 
@@ -138,19 +179,19 @@ def draw_bell(draw, frame):
 
 def draw_notification_screen(display, frame, reminder=None):
 
-    # Use demo values when no live reminder is supplied.
-    title = NOTIFICATION_TITLE
-    message = NOTIFICATION_MESSAGE
-    scheduled_time = NOTIFICATION_TIME
+    # Live reminders supplied by DisplayWorker take priority.
+    has_live_reminder = reminder is not None
 
-    # Use real reminder information when available.
-    if reminder is not None:
+    # Use demo values only for the standalone demonstration.
+    if has_live_reminder:
 
-        title = reminder.get("title") or "Reminder"
+        title = str(reminder.get("title") or "Reminder")
 
-        message = reminder.get("content") or ""
+        message = str(reminder.get("content") or "")
 
         reminder_time = reminder.get("reminder_time")
+
+        scheduled_time = ""
 
         if reminder_time:
             try:
@@ -162,6 +203,14 @@ def draw_notification_screen(display, frame, reminder=None):
             except ValueError:
                 scheduled_time = str(reminder_time)
 
+    else:
+
+        title = NOTIFICATION_TITLE
+
+        message = NOTIFICATION_MESSAGE
+
+        scheduled_time = NOTIFICATION_TIME
+
     image = Image.new(
         "RGB",
         (WIDTH, HEIGHT),
@@ -172,9 +221,9 @@ def draw_notification_screen(display, frame, reminder=None):
 
     header_font = load_font(16)
     label_font = load_font(11)
-    title_font = load_font(24)
+    title_font = load_font(22)
     message_font = load_font(13)
-    time_font = load_font(22)
+    time_font = load_font(20)
 
     # --------------------------------------
     # Header
@@ -223,61 +272,107 @@ def draw_notification_screen(display, frame, reminder=None):
     # Reminder heading
     # --------------------------------------
 
-    centered_text(
-        draw,
-        112,
-        "REMINDER!",
-        label_font,
-        AMBER
-    )
+    if has_live_reminder and not title:
 
-    # --------------------------------------
-    # Reminder title
-    # --------------------------------------
+        centered_text(
+            draw,
+            112,
+            "REMINDER!",
+            label_font,
+            AMBER
+        )
 
-    centered_text(
-        draw,
-        130,
-        NOTIFICATION_TITLE,
-        title_font,
-        WHITE
-    )
+        centered_text(
+            draw,
+            145,
+            "NO UPCOMING REMINDERS",
+            title_font,
+            WHITE
+        )
 
-    # --------------------------------------
-    # Reminder message
-    # --------------------------------------
+        centered_text(
+            draw,
+            184,
+            "",
+            message_font,
+            MUTED
+        )
 
-    centered_text(
-        draw,
-        163,
-        NOTIFICATION_MESSAGE,
-        message_font,
-        MUTED
-    )
+        centered_text(
+            draw,
+            220,
+            "YOU'RE ALL CAUGHT UP",
+            label_font,
+            AMBER
+        )
 
-    # --------------------------------------
-    # Scheduled time
-    # --------------------------------------
+    else:
 
-    centered_text(
-        draw,
-        184,
-        NOTIFICATION_TIME,
-        time_font,
-        AMBER
-    )
+        centered_text(
+            draw,
+            112,
+            "REMINDER!",
+            label_font,
+            AMBER
+        )
 
-    # --------------------------------------
-    # Bottom caption
-    # --------------------------------------
+        wrapped_title_lines = wrap_text(
+            draw,
+            title,
+            title_font,
+            252
+        )
 
-    centered_text(
-        draw,
-        220,
-        "DON'T FORGET!",
-        label_font,
-        AMBER
-    )
+        title_y = 130
+
+        for line in wrapped_title_lines[:2]:
+
+            centered_text(
+                draw,
+                title_y,
+                line,
+                title_font,
+                WHITE
+            )
+
+            title_y += 26
+
+        wrapped_message_lines = wrap_text(
+            draw,
+            message,
+            message_font,
+            252
+        )
+
+        message_y = 163
+
+        for line in wrapped_message_lines[:3]:
+
+            centered_text(
+                draw,
+                message_y,
+                line,
+                message_font,
+                MUTED
+            )
+
+            message_y += 17
+
+        centered_text(
+            draw,
+            184,
+            scheduled_time,
+            time_font,
+            AMBER
+        )
+
+        centered_text(
+            draw,
+            220,
+            "DON'T FORGET!",
+            label_font,
+            AMBER
+        )
 
     display.display(image)
 

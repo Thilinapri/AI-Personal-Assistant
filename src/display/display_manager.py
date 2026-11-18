@@ -21,6 +21,7 @@ WHITE = (240, 245, 255)
 MUTED = (125, 150, 180)
 ROBOT_COLOR = (30, 48, 75)
 GREEN = (40, 220, 140)
+RED = (235, 105, 105)
 
 
 # ==========================================
@@ -139,7 +140,7 @@ def draw_robot(draw, frame):
 # Create EchoMind Home Screen
 # ==========================================
 
-def draw_screen(display, frame):
+def draw_screen(display, frame, listening_enabled=None):
 
     image = Image.new(
         "RGB",
@@ -177,37 +178,61 @@ def draw_screen(display, frame):
     # Robot animation
     draw_robot(draw, frame)
 
-    # Listening status
-    centered_text(
-        draw,
-        166,
-        "LISTENING",
-        status_font,
-        CYAN
-    )
+    # Microphone status
+    if listening_enabled is None:
+
+        centered_text(
+            draw,
+            166,
+            "LISTENING",
+            status_font,
+            CYAN
+        )
+
+    elif listening_enabled:
+
+        centered_text(
+            draw,
+            166,
+            "MIC: ON",
+            status_font,
+            GREEN
+        )
+
+    else:
+
+        centered_text(
+            draw,
+            166,
+            "MIC: OFF",
+            status_font,
+            RED
+        )
 
     # Animated sound waves
     center_x = 160
     center_y = 194
 
-    for i in range(3):
+    if listening_enabled is not False:
 
-        height = 3 + int(
-            abs(math.sin(frame * 0.35 + i * 0.9)) * 7
-        )
+        for i in range(3):
 
-        x = center_x - 17 + i * 17
+            height = 3 + int(
+                abs(math.sin(frame * 0.35 + i * 0.9)) * 7
+            )
 
-        draw.rounded_rectangle(
-            (
-                x,
-                center_y - height,
-                x + 6,
-                center_y + height
-            ),
-            radius=3,
-            fill=CYAN
-        )
+            x = center_x - 17 + i * 17
+
+            draw.rounded_rectangle(
+                (
+                    x,
+                    center_y - height,
+                    x + 6,
+                    center_y + height
+                ),
+                radius=3,
+                fill=CYAN
+            )
 
     # Current time and date
     now = time.localtime()

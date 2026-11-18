@@ -1,4 +1,3 @@
-
 import time
 import threading
 
@@ -15,11 +14,15 @@ try:
     from .display_manager import draw_screen as draw_home_screen
     from .screen_reminders import draw_reminder_screen
     from .screen_memories import draw_memory_screen
+    from .screen_notifications import draw_notification_screen
+    from .screen_transcript import draw_transcript_screen
 
 except ImportError:
     from display_manager import draw_screen as draw_home_screen
     from screen_reminders import draw_reminder_screen
     from screen_memories import draw_memory_screen
+    from screen_notifications import draw_notification_screen
+    from screen_transcript import draw_transcript_screen
 
 
 # ==========================================
@@ -36,16 +39,21 @@ BACKGROUND = (10, 17, 32)
 
 SPI_SPEED = 4000000
 
-HOME_DURATION = 8
-REMINDER_DURATION = 5
-MEMORY_DURATION = 5
-
 DATA_REFRESH_INTERVAL = 5
 
+PREVIOUS_BUTTON_PIN = 5
+LISTENING_BUTTON_PIN = 6
+NEXT_BUTTON_PIN = 13
+
+BUTTON_POLL_DELAY = 0.03
+BUTTON_DEBOUNCE_DELAY = 0.25
+
 SCREENS = [
-    ("home", HOME_DURATION),
-    ("reminder", REMINDER_DURATION),
-    ("memory", MEMORY_DURATION),
+    "home",
+    "reminder",
+    "memory",
+    "notifications",
+    "transcript",
 ]
 
 
@@ -74,8 +82,37 @@ class DisplayWorker(threading.Thread):
 
         self.latest_reminder = None
         self.latest_memory = None
+        self.latest_transcript = "No transcript yet"
+
+        self.listening_enabled = True
 
         self.last_data_refresh = 0
+
+        self.current_screen_index = 0
+
+        self.previous_button_state = GPIO.HIGH
+        self.listening_button_state = GPIO.HIGH
+        self.next_button_state = GPIO.HIGH
+
+        self.previous_button_time = 0
+        self.listening_button_time = 0
+        self.next_button_time = 0
+
+        self.data_changed = True
+        self.transcript_changed = True
+
+        self.data_lock = threading.Lock()
+
+    # ======================================
+    # Store latest completed transcription
+    # ======================================
+
+    def update_transcript(self, transcription):
+        """Store the latest completed transcription."""
+
+        with self.data_lock:
+            self.latest_transcript = transcription
+            self.transcript_changed = True
 
     # ======================================
     # Fetch live database information
@@ -104,7 +141,7 @@ class DisplayWorker(threading.Thread):
 
                 reminder = pending_reminders[0]
 
-                self.latest_reminder = {
+                latest_reminder = {
                     "reminder_time": reminder[2],
                     "title": reminder[6],
                     "content": reminder[7],
@@ -112,7 +149,7 @@ class DisplayWorker(threading.Thread):
 
             else:
 
-                self.latest_reminder = None
+                latest_reminder = None
 
             # ----------------------------------
             # Latest saved memory
@@ -124,7 +161,7 @@ class DisplayWorker(threading.Thread):
 
                 memory = memories[0]
 
-                self.latest_memory = {
+                latest_memory = {
                     "category": memory[1],
                     "title": memory[2],
                     "content": memory[3],
@@ -136,7 +173,26 @@ class DisplayWorker(threading.Thread):
 
             else:
 
-                self.latest_memory = None
+                latest_memory = None
+
+            latest_listening_enabled = (
+                self.database.get_listening_enabled()
+            )
+
+            with self.data_lock:
+
+                data_changed = (
+                    latest_reminder != self.latest_reminder
+                    or latest_memory != self.latest_memory
+                    or latest_listening_enabled != self.listening_enabled
+                )
+
+                self.latest_reminder = latest_reminder
+                self.latest_memory = latest_memory
+                self.listening_enabled = latest_listening_enabled
+
+                if data_changed:
+                    self.data_changed = True
 
             self.last_data_refresh = time.monotonic()
 
@@ -158,6 +214,24 @@ class DisplayWorker(threading.Thread):
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
 
+        GPIO.setup(
+            PREVIOUS_BUTTON_PIN,
+            GPIO.IN,
+            pull_up_down=GPIO.PUD_UP
+        )
+
+        GPIO.setup(
+            LISTENING_BUTTON_PIN,
+            GPIO.IN,
+            pull_up_down=GPIO.PUD_UP
+        )
+
+        GPIO.setup(
+            NEXT_BUTTON_PIN,
+            GPIO.IN,
+            pull_up_down=GPIO.PUD_UP
+        )
+
         display = st7789.ST7789(
             port=0,
             cs=0,
@@ -178,8 +252,105 @@ class DisplayWorker(threading.Thread):
         display._init()
 
         print("EchoMind TFT initialized successfully.")
+        print("Display buttons initialized:")
+        print("  GPIO 5  - Previous screen")
+        print("  GPIO 6  - Toggle listening")
+        print("  GPIO 13 - Next screen")
 
         return display
+
+    # ======================================
+    # Button Handling
+    # ======================================
+
+    def setup_button_states(self):
+
+        self.previous_button_state = GPIO.input(PREVIOUS_BUTTON_PIN)
+        self.listening_button_state = GPIO.input(LISTENING_BUTTON_PIN)
+        self.next_button_state = GPIO.input(NEXT_BUTTON_PIN)
+
+        self.previous_button_time = time.monotonic()
+        self.listening_button_time = time.monotonic()
+        self.next_button_time = time.monotonic()
+
+    def handle_buttons(self):
+
+        now = time.monotonic()
+
+        previous_state = GPIO.input(PREVIOUS_BUTTON_PIN)
+
+        if (
+            previous_state == GPIO.LOW
+            and self.previous_button_state == GPIO.HIGH
+            and now - self.previous_button_time >= BUTTON_DEBOUNCE_DELAY
+        ):
+            self.previous_button_time = now
+            self.change_screen(-1)
+
+        self.previous_button_state = previous_state
+
+        listening_state = GPIO.input(LISTENING_BUTTON_PIN)
+
+        if (
+            listening_state == GPIO.LOW
+            and self.listening_button_state == GPIO.HIGH
+            and now - self.listening_button_time >= BUTTON_DEBOUNCE_DELAY
+        ):
+            self.listening_button_time = now
+            self.toggle_listening()
+
+        self.listening_button_state = listening_state
+
+        next_state = GPIO.input(NEXT_BUTTON_PIN)
+
+        if (
+            next_state == GPIO.LOW
+            and self.next_button_state == GPIO.HIGH
+            and now - self.next_button_time >= BUTTON_DEBOUNCE_DELAY
+        ):
+            self.next_button_time = now
+            self.change_screen(1)
+
+        self.next_button_state = next_state
+
+    def change_screen(self, direction):
+
+        self.current_screen_index = (
+            self.current_screen_index + direction
+        ) % len(SCREENS)
+
+        print(
+            "Display screen changed:",
+            SCREENS[self.current_screen_index]
+        )
+
+    def toggle_listening(self):
+
+        if self.database is None:
+            print("Display: Listening toggle unavailable without database.")
+            return
+
+        try:
+
+            enabled = not self.database.get_listening_enabled()
+
+            self.database.set_listening_enabled(enabled)
+
+            with self.data_lock:
+                self.listening_enabled = enabled
+                self.data_changed = True
+
+            if enabled:
+                print("Display: Listening enabled.")
+            else:
+                print("Display: Listening paused.")
+
+        except Exception as error:
+
+            print(
+                "Display: Listening toggle failed:",
+                repr(error)
+            )
 
     # ======================================
     # Main Display Loop
@@ -195,114 +366,121 @@ class DisplayWorker(threading.Thread):
 
             display = self.initialize_display()
 
-            screen_index = 0
-            screen_started = time.monotonic()
+            self.setup_button_states()
 
             frame = 0
             last_render = 0
-
-            print("Automatic screen rotation started.")
 
             while not self.stop_event.is_set():
 
                 now = time.monotonic()
 
-                # ----------------------------------
-                # Refresh database periodically
-                # ----------------------------------
+                self.handle_buttons()
 
                 if (
                     self.database is not None
                     and now - self.last_data_refresh >= self.refresh_interval
                 ):
-
                     self.refresh_database_data()
 
-                # ----------------------------------
-                # Screen rotation
-                # ----------------------------------
-
-                screen_name, duration = SCREENS[screen_index]
-
-                if now - screen_started >= duration:
-
-                    screen_index = (
-                        screen_index + 1
-                    ) % len(SCREENS)
-
-                    screen_started = now
-                    frame = 0
-                    last_render = 0
-
-                    screen_name, duration = SCREENS[screen_index]
-
-                    print("Display changing screen:", screen_name)
-
-                    continue
-
-                # ----------------------------------
-                # Home screen
-                # ----------------------------------
+                screen_name = SCREENS[self.current_screen_index]
 
                 if screen_name == "home":
 
-                    draw_home_screen(display, frame)
+                    should_render = False
 
-                    frame += 1
+                    with self.data_lock:
+                        listening_enabled = self.listening_enabled
 
-                    self.stop_event.wait(0.12)
+                        if self.data_changed:
+                            should_render = True
+                            self.data_changed = False
 
-                # ----------------------------------
-                # Upcoming reminder screen
-                # ----------------------------------
+                    if (
+                        now - last_render >= 0.12
+                        or should_render
+                    ):
 
-                elif screen_name == "reminder":
+                        draw_home_screen(
+                            display,
+                            frame,
+                            listening_enabled
+                        )
 
-                    if now - last_render >= 1:
+                        frame += 1
+                        last_render = now
 
-                        if self.database is None:
+                    self.stop_event.wait(0.03)
 
-                            # Standalone demo mode
-                            draw_reminder_screen(display)
+                else:
 
-                        else:
+                    should_render = False
 
-                            # Live database mode
-                            draw_reminder_screen(
+                    with self.data_lock:
+                        if self.data_changed:
+                            should_render = True
+                            self.data_changed = False
+
+                        if self.transcript_changed:
+                            should_render = True
+                            self.transcript_changed = False
+
+                    if now - last_render >= 1 or should_render:
+
+                        if screen_name == "reminder":
+
+                            if self.database is None:
+                                draw_reminder_screen(display)
+                            else:
+                                with self.data_lock:
+                                    reminder = self.latest_reminder
+
+                                draw_reminder_screen(
+                                    display,
+                                    reminder=reminder,
+                                    live_data=True
+                                )
+
+                        elif screen_name == "memory":
+
+                            if self.database is None:
+                                draw_memory_screen(display)
+                            else:
+                                with self.data_lock:
+                                    memory = self.latest_memory
+
+                                draw_memory_screen(
+                                    display,
+                                    memory=memory,
+                                    live_data=True
+                                )
+
+                        elif screen_name == "notifications":
+
+                            with self.data_lock:
+                                reminder = self.latest_reminder
+
+                            draw_notification_screen(
                                 display,
-                                reminder=self.latest_reminder,
-                                live_data=True
+                                frame,
+                                reminder=reminder
+                            )
+
+                        elif screen_name == "transcript":
+
+                            with self.data_lock:
+                                transcription = self.latest_transcript
+                                listening_enabled = self.listening_enabled
+
+                            draw_transcript_screen(
+                                display,
+                                transcription,
+                                listening_enabled
                             )
 
                         last_render = now
 
-                    self.stop_event.wait(0.05)
-
-                # ----------------------------------
-                # Recently added memory screen
-                # ----------------------------------
-
-                elif screen_name == "memory":
-
-                    if now - last_render >= 1:
-
-                        if self.database is None:
-
-                            # Standalone demo mode
-                            draw_memory_screen(display)
-
-                        else:
-
-                            # Live database mode
-                            draw_memory_screen(
-                                display,
-                                memory=self.latest_memory,
-                                live_data=True
-                            )
-
-                        last_render = now
-
-                    self.stop_event.wait(0.05)
+                    self.stop_event.wait(0.03)
 
         except Exception as error:
 
@@ -340,35 +518,3 @@ class DisplayWorker(threading.Thread):
     def stop(self):
 
         self.stop_event.set()
-
-
-# ==========================================
-# Standalone Display Test
-# ==========================================
-
-def main():
-
-    worker = DisplayWorker(database=None)
-
-    try:
-
-        worker.start()
-
-        print("Standalone display test started.")
-        print("Press CTRL+C to stop.")
-
-        while worker.is_alive():
-            worker.join(timeout=1)
-
-    except KeyboardInterrupt:
-
-        print("\nStopping standalone display test...")
-
-        worker.stop()
-        worker.join()
-
-    print("Standalone display test finished.")
-
-
-if __name__ == "__main__":
-    main()

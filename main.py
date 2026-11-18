@@ -364,6 +364,7 @@ def main():
         keyword_filter=keyword_filter,
         memory_engine=memory_engine,
         memory_manager=memory_manager,
+        transcript_callback=display_worker.update_transcript,
     )
 
     worker_thread = threading.Thread(

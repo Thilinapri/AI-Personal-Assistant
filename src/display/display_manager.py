@@ -20,10 +20,8 @@ BACKGROUND = (10, 17, 32)
 CYAN = (48, 210, 255)
 WHITE = (240, 245, 255)
 MUTED = (125, 150, 180)
-ROBOT_COLOR = (30, 48, 75)
 GREEN = (40, 220, 140)
 RED = (235, 105, 105)
-
 
 # ==========================================
 # Font Loading
@@ -62,153 +60,227 @@ def centered_text(draw, y, text, font, color):
 
 
 # ==========================================
+# Robot Layout Scaling
+# ==========================================
+
+class _RobotDrawTransform:
+    """Scale robot primitives uniformly into the compact greeting layout."""
+
+    SCALE = 0.8
+    SOURCE_CENTER = (160, 93)
+    TARGET_CENTER = (160, 80)
+
+    def __init__(self, draw):
+        self.draw = draw
+
+    def _point(self, x, y):
+        scale = self.SCALE
+        source_x, source_y = self.SOURCE_CENTER
+        target_x, target_y = self.TARGET_CENTER
+        return (
+            int(round(target_x + (x - source_x) * scale)),
+            int(round(target_y + (y - source_y) * scale)),
+        )
+
+    def _box(self, box):
+        x1, y1 = self._point(box[0], box[1])
+        x2, y2 = self._point(box[2], box[3])
+        return x1, y1, x2, y2
+
+    def _width(self, width):
+        return max(1, int(round(width * self.SCALE)))
+
+    def line(self, points, **kwargs):
+        mapped = [self._point(x, y) for x, y in zip(points[::2], points[1::2])]
+        kwargs["width"] = self._width(kwargs.get("width", 1))
+        self.draw.line([coordinate for point in mapped for coordinate in point], **kwargs)
+
+    def ellipse(self, box, **kwargs):
+        kwargs["width"] = self._width(kwargs.get("width", 1))
+        self.draw.ellipse(self._box(box), **kwargs)
+
+    def rounded_rectangle(self, box, radius=0, **kwargs):
+        kwargs["width"] = self._width(kwargs.get("width", 1))
+        self.draw.rounded_rectangle(
+            self._box(box), radius=self._width(radius), **kwargs
+        )
+
+    def arc(self, box, start, end, **kwargs):
+        kwargs["width"] = self._width(kwargs.get("width", 1))
+        self.draw.arc(self._box(box), start, end, **kwargs)
+
+
+# ==========================================
 # Robot Drawing
 # ==========================================
 
-def draw_robot(draw, frame, listening_enabled=None, animation_time=None):
-    """Draw a floating companion within the original centered robot area."""
-    del frame  # Kept in the signature for compatibility with existing callers.
+def _smoothstep(value):
+    value = max(0.0, min(1.0, value))
+    return value * value * (3.0 - 2.0 * value)
+
+
+def _idle_gaze(animation_time):
+    """Return a slowly changing, clearly visible idle gaze."""
+    phase = animation_time % 12.0
+    if 1.5 <= phase < 3.5:
+        amount = _smoothstep((phase - 1.5) / 0.35)
+        amount *= 1.0 - _smoothstep((phase - 3.15) / 0.35)
+        return -5.0 * amount, 0.0
+    if 4.0 <= phase < 6.0:
+        amount = _smoothstep((phase - 4.0) / 0.35)
+        amount *= 1.0 - _smoothstep((phase - 5.65) / 0.35)
+        return 5.0 * amount, 0.0
+    if 7.0 <= phase < 8.8:
+        amount = _smoothstep((phase - 7.0) / 0.3)
+        amount *= 1.0 - _smoothstep((phase - 8.5) / 0.3)
+        return 0.0, -3.5 * amount
+    return 0.0, 0.0
+
+
+def draw_robot(draw, frame, listening_enabled=None, animation_time=None, state=None):
+    """Draw the minimalist home mascot with lightweight timed expressions."""
+    del frame  # The public caller still passes frame; timing is elapsed-time based.
     if animation_time is None:
         animation_time = time.monotonic()
 
-    listening = listening_enabled is not False
-    float_y = math.sin(animation_time * 1.15) * 1.5
-    breathe = (math.sin(animation_time * 1.6) + 1.0) * 0.5
-    x_shift = math.sin(animation_time * 0.38) * 1.3
-    y_shift = int(round(float_y))
-    center_x = int(round(160 + x_shift))
-    head_top = int(round(59 + y_shift - breathe))
-    head_bottom = int(round(146 + y_shift + breathe))
-    shell_width = int(round(96 + breathe))
-    left = center_x - shell_width // 2
-    right = center_x + shell_width // 2
+    draw = _RobotDrawTransform(draw)
+    listening = listening_enabled is True or state == "listening"
+    state = state or ("listening" if listening else "idle")
 
-    # A restrained hover ring and shadow stay below the floating head.
-    hover_phase = (math.sin(animation_time * 1.4) + 1.0) * 0.5
-    ring_inset = int(round(5 * hover_phase))
-    draw.ellipse(
-        (125 + ring_inset, 151, 195 - ring_inset, 159),
-        fill=(13, 27, 43), outline=(22, 63, 83), width=1
-    )
-    draw.arc(
-        (130 + ring_inset, 152, 190 - ring_inset, 158),
-        190, 350, fill=(35, 124, 157), width=1
-    )
+    # Keep the small centered silhouette inside the original robot area.
+    float_y = int(round(math.sin(animation_time * 1.15) * 1.5))
+    tilt = math.sin(animation_time * 0.34) * 0.8
+    center_x = int(round(160 + math.sin(animation_time * 0.32) * 1.0))
+    top = 59 + float_y
+    bottom = 147 + float_y
+    left = center_x - 49
+    right = center_x + 49
 
-    # Cyan-lit rounded ear panels, tucked slightly behind the shell.
-    ear_top = head_top + 34
-    ear_bottom = ear_top + 27
-    ear_glow = 0.65 + (0.35 if listening else 0.0) * (
-        (math.sin(animation_time * 2.2) + 1.0) * 0.5
-    )
-    ear_color = (27, int(69 + 35 * ear_glow), int(91 + 45 * ear_glow))
-    for x1, x2 in ((left - 9, left + 5), (right - 5, right + 9)):
-        draw.rounded_rectangle(
-            (x1, ear_top, x2, ear_bottom), radius=6,
-            fill=ear_color, outline=(77, 183, 210), width=1
-        )
-        draw.line(
-            (x1 + 4, ear_top + 7, x1 + 4, ear_bottom - 7),
-            fill=(91, 221, 239), width=2
-        )
-
-    # Short antenna and smoothly pulsing cyan beacon.
-    antenna_x = center_x
-    pulse = (math.sin(animation_time * 2.0) + 1.0) * 0.5
+    # Antenna light pulses; listening has a brighter, steadier glow.
+    pulse = (math.sin(animation_time * (1.5 if state == "thinking" else 2.0)) + 1.0) * 0.5
     if listening:
-        pulse = 0.55 + pulse * 0.45
-    beacon = (40, int(160 + 75 * pulse), int(205 + 50 * pulse))
-    draw.line(
-        (antenna_x, head_top + 1, antenna_x, head_top - 10),
-        fill=(150, 190, 205), width=3
+        pulse = 0.68 + pulse * 0.32
+    antenna_color = (25, int(150 + 80 * pulse), int(190 + 65 * pulse))
+    antenna_x = center_x + int(round(tilt * 4))
+    draw.line((antenna_x, top + 1, antenna_x, top - 9), fill=CYAN, width=2)
+    draw.ellipse(
+        (antenna_x - 5, top - 20, antenna_x + 5, top - 10),
+        fill=(16, 54, 75), outline=(54, 192, 226), width=1
     )
     draw.ellipse(
-        (antenna_x - 6, head_top - 23, antenna_x + 6, head_top - 11),
-        fill=(39, 72, 91), outline=(117, 201, 219), width=1
-    )
-    draw.ellipse(
-        (antenna_x - 3, head_top - 20, antenna_x + 3, head_top - 14),
-        fill=beacon
+        (antenna_x - 3, top - 18, antenna_x + 3, top - 12),
+        fill=antenna_color
     )
 
-    # Pearl shell with layered silver shading and cyan edge accents.
+    # Simple rounded head, cyan outline, and dark face panel.
     draw.rounded_rectangle(
-        (left, head_top, right, head_bottom), radius=27,
-        fill=(150, 177, 194), outline=(92, 198, 220), width=2
+        (left, top, right, bottom), radius=24,
+        fill=(15, 30, 48), outline=CYAN, width=2
     )
+    face_left, face_right = center_x - 40, center_x + 40
+    face_top, face_bottom = top + 15, bottom - 13
     draw.rounded_rectangle(
-        (left + 3, head_top + 3, right - 3, head_bottom - 3), radius=24,
-        fill=(219, 230, 235), outline=(246, 250, 250), width=1
-    )
-    draw.arc(
-        (left + 9, head_top + 5, right - 9, head_top + 28),
-        195, 345, fill=(255, 255, 255), width=2
+        (face_left, face_top, face_right, face_bottom), radius=18,
+        fill=(5, 13, 27), outline=(22, 79, 108), width=1
     )
 
-    # Dark glossy face panel.
-    face_left = center_x - 39
-    face_right = center_x + 39
-    face_top = head_top + 19
-    face_bottom = head_top + 68
-    draw.rounded_rectangle(
-        (face_left, face_top, face_right, face_bottom), radius=17,
-        fill=(7, 16, 31), outline=(80, 150, 176), width=1
-    )
-    draw.arc(
-        (face_left + 5, face_top + 2, face_right - 5, face_top + 19),
-        195, 345, fill=(36, 72, 94), width=1
-    )
+    # Compact illuminated side elements remain within the original footprint.
+    ear_y = top + 31
+    ear_color = (24, 115, 151) if listening else (20, 70, 98)
+    for ear_box in (
+        (left - 8, ear_y, left + 2, ear_y + 24),
+        (right - 2, ear_y, right + 8, ear_y + 24),
+    ):
+        draw.rounded_rectangle(
+            ear_box, radius=5, fill=ear_color, outline=CYAN, width=1
+        )
 
-    # Gaze follows a slow, smooth path with occasional upward/downward looks.
-    gaze_x = int(round(math.sin(animation_time * 0.42) * 2.2))
-    gaze_y = int(round(math.sin(animation_time * 0.27 + 1.1) * 1.2))
-    eye_y = face_top + 22 + gaze_y
-    eye_centers = (center_x - 19, center_x + 19)
+    gaze_x, gaze_y = _idle_gaze(animation_time)
+    if state == "looking_left":
+        gaze_x = -5.0
+    elif state == "looking_right":
+        gaze_x = 5.0
+    elif state == "thinking":
+        gaze_y = -4.0
+    if listening:
+        gaze_x *= 0.35
+        gaze_y = min(gaze_y, -1.0)
 
-    # Regular gentle blink, plus a rare short wink.
-    blink_phase = animation_time % 4.8
-    blink = max(0.0, 1.0 - abs(blink_phase - 0.13) / 0.13)
+    blink_phase = animation_time % 5.1
+    blink_amount = 0.0
+    if blink_phase < 0.22:
+        blink_amount = math.sin(math.pi * blink_phase / 0.22)
     wink_phase = animation_time % 17.0
-    wink = max(0.0, 1.0 - abs(wink_phase - 0.18) / 0.18)
+    wink_amount = max(0.0, 1.0 - abs(wink_phase - 0.18) / 0.18)
+    happy_phase = animation_time % 15.0
+    happy = state == "happy" or (
+        state == "idle" and 10.8 <= happy_phase < 12.0
+    )
+    wink = state in ("wink", "winking")
+
+    eye_y = int(round(top + 43 + gaze_y))
+    eye_centers = (center_x - 20, center_x + 20)
     for index, eye_x in enumerate(eye_centers):
-        eye_blink = max(blink, wink if index == 0 else 0.0)
-        eye_width = max(3, int(round(15 * (1.0 - 0.9 * eye_blink))))
-        eye_height = max(2, int(round(17 * (1.0 - 0.92 * eye_blink))))
-        eye_glow = int(14 + (10 if listening else 0) + 8 * pulse)
-        draw.ellipse(
-            (eye_x - eye_width // 2 - 2, eye_y - eye_height // 2 - 2,
-             eye_x + eye_width // 2 + 2, eye_y + eye_height // 2 + 2),
-            fill=(15, 74 + eye_glow, 103 + eye_glow)
+        eye_tilt = tilt if index == 0 else -tilt
+        this_blink = max(blink_amount, wink_amount if index == 0 else 0.0)
+        if wink or (not listening and wink_amount > 0 and index == 0):
+            this_blink = max(this_blink, 1.0)
+        eye_center_y = int(round(eye_y + eye_tilt))
+
+        if happy and this_blink < 0.7:
+            draw.arc(
+                (eye_x - 10, eye_center_y - 4, eye_x + 10, eye_center_y + 8),
+                195, 345, fill=CYAN, width=3
+            )
+            continue
+
+        eye_height = max(2, int(round(18 * (1.0 - 0.9 * this_blink))))
+        eye_box = (
+            eye_x - 8, eye_center_y - eye_height // 2,
+            eye_x + 8, eye_center_y + eye_height // 2,
         )
-        draw.ellipse(
-            (eye_x - eye_width // 2, eye_y - eye_height // 2,
-             eye_x + eye_width // 2, eye_y + eye_height // 2),
-            fill=(41, int(174 + 45 * pulse), 239)
-        )
-        if eye_blink < 0.65:
-            pupil_x = eye_x + gaze_x
+        draw.ellipse(eye_box, fill=(43, 199, 244))
+        if this_blink < 0.62:
+            pupil_x = eye_x + int(round(gaze_x))
+            pupil_y = eye_center_y + 1
             draw.ellipse(
-                (pupil_x - 2, eye_y - 3, pupil_x + 2, eye_y + 3),
-                fill=(230, 250, 255)
+                (pupil_x - 4, pupil_y - 5, pupil_x + 4, pupil_y + 5),
+                fill=(7, 35, 56)
+            )
+            draw.ellipse(
+                (pupil_x - 2, pupil_y - 4, pupil_x + 1, pupil_y - 1),
+                fill=WHITE
             )
 
-    # Curved brows follow the gaze; a tiny asymmetry hints at a relaxed tilt.
-    brow_tilt = int(round(math.sin(animation_time * 0.31) * 1.0))
-    for index, eye_x in enumerate(eye_centers):
-        brow_y = face_top + 10 + (brow_tilt if index == 0 else -brow_tilt)
+    # Friendly default smile; explicit speaking state opens and closes it.
+    mouth_x = center_x
+    mouth_y = top + 65
+    if state == "speaking":
+        mouth_open = 2 + int((math.sin(animation_time * 9.0) + 1.0) * 3)
+        draw.ellipse(
+            (mouth_x - 5, mouth_y - mouth_open, mouth_x + 5, mouth_y + mouth_open),
+            fill=CYAN
+        )
+    else:
+        smile_height = 12 if happy else 9
         draw.arc(
-            (eye_x - 9, brow_y - 4, eye_x + 9, brow_y + 5),
-            195, 345, fill=(157, 226, 244), width=2
+            (mouth_x - 12, mouth_y - 5, mouth_x + 12, mouth_y + smile_height),
+            15, 165, fill=(113, 224, 250), width=2
         )
 
-    # Small animated smile; listening adds a slightly more attentive lift.
-    smile_phase = (math.sin(animation_time * 1.05) + 1.0) * 0.5
-    mouth_lift = int(round(smile_phase * (2 if listening else 1)))
-    mouth_top = face_top + 36 - mouth_lift
-    draw.arc(
-        (center_x - 11, mouth_top, center_x + 11, mouth_top + 13),
-        15, 165, fill=(151, 224, 241), width=2
-    )
+    # Listening waves pulse at the sides only while the real app flag is on.
+    if listening:
+        wave_height = 3 + int((math.sin(animation_time * 4.0) + 1.0) * 2)
+        wave_y = ear_y + 12
+        for direction in (-1, 1):
+            wave_x = center_x + direction * 61
+            draw.arc(
+                (wave_x - 4, wave_y - wave_height,
+                 wave_x + 4, wave_y + wave_height),
+                270 if direction < 0 else 90,
+                90 if direction < 0 else 270,
+                fill=CYAN, width=2
+            )
 
 
 # ==========================================
@@ -250,8 +322,39 @@ def draw_screen(display, frame, listening_enabled=None):
         fill=GREEN
     )
 
+    # Thin cyan rule below the header.
+    draw.line(
+        (12, 31, WIDTH - 12, 31),
+        fill=(33, 103, 132),
+        width=1
+    )
+
     # Robot animation
     draw_robot(draw, frame, listening_enabled, time.monotonic())
+
+    # Short greeting stack below the compact robot.
+    centered_text(
+        draw,
+        126,
+        "Hello! I'm EchoMind",
+        status_font,
+        CYAN
+    )
+
+    centered_text(
+        draw,
+        143,
+        "Your AI companion",
+        small_font,
+        WHITE
+    )
+
+    # Divider separates the mascot from live microphone status.
+    draw.line(
+        (12, 159, WIDTH - 12, 159),
+        fill=(33, 103, 132),
+        width=1
+    )
 
     # Microphone status
     if listening_enabled is None:

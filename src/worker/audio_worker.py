@@ -162,11 +162,12 @@ class AudioWorker:
                 current_time=datetime.now(),
             )
 
-            memories = result.get("memories", [])
+            memories = self._validate_extracted_memories(result)
             print(
                 "[MEMORY] Extraction completed: "
                 f"{len(memories)} candidate(s)."
             )
+            print("[MEMORY] Validation completed.")
 
         except Exception as error:
             print(
@@ -185,8 +186,22 @@ class AudioWorker:
         # -------------------------------------------------
 
         try:
-            self.memory_manager.store_memories(memories)
-            print("[DATABASE] Existing memory storage completed.")
+            print(f"[DATABASE] Sending {len(memories)} memories to local storage.")
+            stored_ids = self.memory_manager.store_memories(memories)
+            stored_count = len(stored_ids or [])
+            print(
+                "[DATABASE] Local storage returned IDs for "
+                f"{stored_count}/{len(memories)} memories."
+            )
+
+            if stored_count != len(memories):
+                print(
+                    "[DATABASE] Save incomplete; transcript retained "
+                    "for later processing."
+                )
+                return
+
+            print("[DATABASE] All extracted memories confirmed by local storage.")
 
         except Exception as error:
             print(
@@ -212,3 +227,37 @@ class AudioWorker:
                 "[AUDIO] Transcript cleanup failed: "
                 f"{type(error).__name__}"
             )
+
+    @staticmethod
+    def _validate_extracted_memories(result):
+        """Check the existing local database fields before storage."""
+
+        if not isinstance(result, dict):
+            raise ValueError("Memory extraction result must be an object.")
+
+        memories = result.get("memories")
+        if not isinstance(memories, list):
+            raise ValueError("Memory extraction result must contain a list.")
+
+        required_fields = {
+            "category",
+            "title",
+            "content",
+            "date",
+            "time",
+            "notification",
+        }
+        for memory in memories:
+            if not isinstance(memory, dict):
+                raise ValueError("Each extracted memory must be an object.")
+            if not required_fields.issubset(memory):
+                raise ValueError("An extracted memory is missing database fields.")
+            if any(
+                not isinstance(memory[field], str)
+                for field in ("category", "title", "content", "date", "time")
+            ):
+                raise ValueError("Extracted memory text fields are invalid.")
+            if not isinstance(memory["notification"], bool):
+                raise ValueError("Extracted memory notification field is invalid.")
+
+        return memories

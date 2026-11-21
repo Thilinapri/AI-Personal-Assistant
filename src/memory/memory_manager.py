@@ -26,7 +26,12 @@ class MemoryManager:
         if not memories:
             return []
 
+        print(
+            "[DATABASE] Processing "
+            f"{len(memories)} memories with local storage."
+        )
         stored_ids = []
+        failed_count = 0
 
         for memory in memories:
 
@@ -35,15 +40,22 @@ class MemoryManager:
                 stored_ids.append(memory_id)
 
             except Exception as error:
-                title = memory.get(
-                    "title",
-                    "Unknown memory",
-                )
-
                 print(
-                    f"Memory processing failed "
-                    f"for '{title}': {error}"
+                    "[DATABASE] Local memory save failed: "
+                    f"{type(error).__name__}"
                 )
+                failed_count += 1
+
+        print(
+            "[DATABASE] Local storage completed: "
+            f"{len(stored_ids)}/{len(memories)} memory record(s) "
+            "saved or matched."
+        )
+        if failed_count:
+            print(
+                "[DATABASE] Failed memory record(s): "
+                f"{failed_count}."
+            )
 
         return stored_ids
 

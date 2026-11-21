@@ -9,6 +9,12 @@ import numpy as np
 
 from src.audio.microphone import Microphone
 from src.config import BLOCK_SIZE
+from src.database.database import Database
+from src.memory.memory_manager import MemoryManager
+from src.memory.retrieval_service import RetrievalService
+from src.memory.rule_based_relationship_classifier import (
+    RuleBasedRelationshipClassifier,
+)
 from src.worker.audio_chunker import AudioChunker
 from src.worker.audio_worker import AudioWorker
 
@@ -59,9 +65,11 @@ class FakeTranscriptBuffer:
     def __init__(self):
         self.next_id = 0
         self.removed = []
+        self.entries = []
 
     def add_with_context(self, text, before=2, after=0):
         self.next_id += 1
+        self.entries.append((self.next_id, text))
         return self.next_id, [text]
 
     def remove(self, entry_id):
@@ -97,8 +105,48 @@ class SequenceMemoryEngine:
             raise RuntimeError("mock memory extraction failure")
         memories = []
         if self.return_memories:
-            memories = [{"title": f"memory-{self.calls}"}]
+            memories = [{
+                "category": "Note",
+                "title": f"memory-{self.calls}",
+                "content": f"content-{self.calls}",
+                "date": "",
+                "time": "",
+                "notification": False,
+            }]
         return {"memories": memories}
+
+
+class TwoMemoryEngine:
+    def __init__(self, memories):
+        self.memories = memories
+
+    def process(self, **kwargs):
+        return {"memories": self.memories}
+
+
+class FixedEmbeddingService:
+    model_name = "test-fixed-embedding"
+
+    def encode(self, text):
+        return [1.0, 0.0]
+
+
+class FailSecondMemoryInsertOnce:
+    """Proxy that fails the second distinct record on its first insert."""
+
+    def __init__(self, database, failing_title):
+        self.database = database
+        self.failing_title = failing_title
+        self.failed = False
+
+    def __getattr__(self, name):
+        return getattr(self.database, name)
+
+    def insert_memory(self, memory, *args, **kwargs):
+        if memory["title"] == self.failing_title and not self.failed:
+            self.failed = True
+            raise RuntimeError("injected one-time insert failure")
+        return self.database.insert_memory(memory, *args, **kwargs)
 
 
 class FakeMemoryManager:
@@ -110,8 +158,11 @@ class FakeMemoryManager:
     def store_memories(self, memories):
         self.calls += 1
         if self.calls in self.errors:
-            raise RuntimeError("mock database storage failure")
+            # Mirrors MemoryManager.store_memories(), which returns fewer IDs
+            # after it catches a per-memory storage error.
+            return []
         self.stored.extend(memories)
+        return list(range(len(self.stored) - len(memories) + 1, len(self.stored) + 1))
 
 
 def make_worker(audio_queue, transcriber, memory_engine, memory_manager):
@@ -149,6 +200,81 @@ class AudioWorkerContinuityTests(unittest.TestCase):
         self.assertEqual(manager.calls, 10)
         self.assertEqual(len(manager.stored), 10)
 
+    def test_extracted_memory_reaches_existing_local_database(self):
+        database = Database(":memory:")
+        self.addCleanup(database.close)
+        audio_queue = queue.Queue()
+        transcriber = SequenceTranscriber()
+        worker = AudioWorker(
+            audio_queue=audio_queue,
+            stt_service=transcriber,
+            transcript_buffer=FakeTranscriptBuffer(),
+            keyword_filter=AlwaysKeyword(),
+            memory_engine=SequenceMemoryEngine(),
+            memory_manager=MemoryManager(database=database),
+        )
+
+        self.run_worker(worker, [b"chunk"])
+
+        rows = database.get_all_memories()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][2], "memory-1")
+
+    def test_partial_save_retry_does_not_duplicate_first_memory(self):
+        database = Database(":memory:")
+        self.addCleanup(database.close)
+        database_proxy = FailSecondMemoryInsertOnce(
+            database,
+            failing_title="Second memory",
+        )
+        embeddings = FixedEmbeddingService()
+        manager = MemoryManager(
+            database=database_proxy,
+            embedding_service=embeddings,
+            retrieval_service=RetrievalService(
+                database=database_proxy,
+                embedding_service=embeddings,
+            ),
+            relationship_classifier=RuleBasedRelationshipClassifier(),
+        )
+        memories = [
+            {
+                "category": "Note",
+                "title": "First memory",
+                "content": "First extracted fact.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+            {
+                "category": "Task",
+                "title": "Second memory",
+                "content": "Second extracted fact.",
+                "date": "",
+                "time": "",
+                "notification": False,
+            },
+        ]
+        audio_queue = queue.Queue()
+        transcript_buffer = FakeTranscriptBuffer()
+        worker = AudioWorker(
+            audio_queue=audio_queue,
+            stt_service=SequenceTranscriber(),
+            transcript_buffer=transcript_buffer,
+            keyword_filter=AlwaysKeyword(),
+            memory_engine=TwoMemoryEngine(memories),
+            memory_manager=manager,
+        )
+
+        self.run_worker(worker, [b"original chunk", b"retry chunk"])
+
+        rows = database.get_active_memories()
+        rows_by_title = {row[2]: row for row in rows}
+        self.assertEqual(set(rows_by_title), {"First memory", "Second memory"})
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows_by_title["First memory"][12], 2)
+        self.assertEqual(transcript_buffer.removed, [2])
+
     def test_extraction_failure_does_not_block_next_keyword_chunk(self):
         audio_queue = queue.Queue()
         transcriber = SequenceTranscriber()
@@ -160,7 +286,10 @@ class AudioWorkerContinuityTests(unittest.TestCase):
 
         self.assertEqual(transcriber.calls, 2)
         self.assertEqual(engine.calls, 2)
-        self.assertEqual(manager.stored, [{"title": "memory-2"}])
+        self.assertEqual(
+            [memory["title"] for memory in manager.stored],
+            ["memory-2"],
+        )
 
     def test_transcription_failure_does_not_block_next_chunk(self):
         audio_queue = queue.Queue()
@@ -187,7 +316,11 @@ class AudioWorkerContinuityTests(unittest.TestCase):
         self.assertEqual(transcriber.calls, 2)
         self.assertEqual(engine.calls, 2)
         self.assertEqual(manager.calls, 2)
-        self.assertEqual(manager.stored, [{"title": "memory-2"}])
+        self.assertEqual(
+            [memory["title"] for memory in manager.stored],
+            ["memory-2"],
+        )
+        self.assertEqual(worker.transcript_buffer.removed, [2])
 
     def test_no_memory_result_does_not_stop_worker(self):
         audio_queue = queue.Queue()

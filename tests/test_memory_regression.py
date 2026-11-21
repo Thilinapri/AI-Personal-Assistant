@@ -231,7 +231,7 @@ class MemoryRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(active), 2)
 
-    def test_memory_batch_continues_after_failure(self):
+    def test_memory_batch_rolls_back_after_failure(self):
 
         memories = [
             {
@@ -260,18 +260,14 @@ class MemoryRegressionTests(unittest.TestCase):
             },
         ]
 
-        original_store_memory = self.memory_manager.store_memory
+        original_insert = self.database.insert_memory
 
-        def controlled_store(memory):
-
+        def controlled_insert(memory, *args, **kwargs):
             if memory["title"] == "Broken memory":
-                raise RuntimeError(
-                    "simulated memory failure"
-                )
+                raise RuntimeError("simulated memory failure")
+            return original_insert(memory, *args, **kwargs)
 
-            return original_store_memory(memory)
-
-        self.memory_manager.store_memory = controlled_store
+        self.database.insert_memory = controlled_insert
 
         stored_ids = self.memory_manager.store_memories(
             memories
@@ -284,18 +280,8 @@ class MemoryRegressionTests(unittest.TestCase):
             for memory in active_memories
         ]
 
-        self.assertCountEqual(
-            titles,
-            [
-                "First memory",
-                "Third memory",
-            ],
-        )
-
-        self.assertEqual(
-            len(stored_ids),
-            2,
-        )
+        self.assertEqual(titles, [])
+        self.assertEqual(stored_ids, [])
 
     def test_semantic_retrieval(self):
         memories = [

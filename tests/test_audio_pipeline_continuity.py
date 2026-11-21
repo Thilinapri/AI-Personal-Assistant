@@ -131,6 +131,17 @@ class FixedEmbeddingService:
         return [1.0, 0.0]
 
 
+class FailSecondEncodingOnce(FixedEmbeddingService):
+    def __init__(self):
+        self.calls = 0
+
+    def encode(self, text):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("injected embedding generation failure")
+        return [1.0, 0.0]
+
+
 class FailSecondMemoryInsertOnce:
     """Proxy that fails the second distinct record on its first insert."""
 
@@ -272,8 +283,42 @@ class AudioWorkerContinuityTests(unittest.TestCase):
         rows_by_title = {row[2]: row for row in rows}
         self.assertEqual(set(rows_by_title), {"First memory", "Second memory"})
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows_by_title["First memory"][12], 2)
+        self.assertEqual(rows_by_title["First memory"][12], 1)
+        self.assertEqual(rows_by_title["Second memory"][12], 1)
         self.assertEqual(transcript_buffer.removed, [2])
+
+    def test_embedding_failure_then_retry_does_not_inflate_seen_count(self):
+        database = Database(":memory:")
+        self.addCleanup(database.close)
+        embeddings = FailSecondEncodingOnce()
+        manager = MemoryManager(
+            database=database,
+            embedding_service=embeddings,
+            retrieval_service=RetrievalService(
+                database=database,
+                embedding_service=embeddings,
+            ),
+            relationship_classifier=RuleBasedRelationshipClassifier(),
+        )
+        memory = {
+            "category": "Note",
+            "title": "Power outage plan",
+            "content": "Keep a charged backup battery.",
+            "date": "",
+            "time": "",
+            "notification": False,
+        }
+
+        with redirect_stdout(io.StringIO()):
+            first_result = manager.store_memories([memory])
+            retry_result = manager.store_memories([memory])
+
+        rows = database.get_active_memories()
+        self.assertEqual(first_result, [])
+        self.assertEqual(len(retry_result), 1)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][2], memory["title"])
+        self.assertEqual(rows[0][12], 1)
 
     def test_extraction_failure_does_not_block_next_keyword_chunk(self):
         audio_queue = queue.Queue()
@@ -290,6 +335,7 @@ class AudioWorkerContinuityTests(unittest.TestCase):
             [memory["title"] for memory in manager.stored],
             ["memory-2"],
         )
+        self.assertEqual(worker.transcript_buffer.removed, [2])
 
     def test_transcription_failure_does_not_block_next_chunk(self):
         audio_queue = queue.Queue()

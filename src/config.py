@@ -50,6 +50,20 @@ ENABLE_GEMINI = True
 
 GEMINI_MODEL = "gemini-3.8-flash"
 
+try:
+    GEMINI_REQUEST_TIMEOUT_MS = int(
+        os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "30000")
+    )
+except ValueError as error:
+    raise ValueError(
+        "GEMINI_REQUEST_TIMEOUT_MS must be a positive integer."
+    ) from error
+
+if not 1 <= GEMINI_REQUEST_TIMEOUT_MS <= 300000:
+    raise ValueError(
+        "GEMINI_REQUEST_TIMEOUT_MS must be between 1 and 300000."
+    )
+
 
 # ===========================
 # Privacy

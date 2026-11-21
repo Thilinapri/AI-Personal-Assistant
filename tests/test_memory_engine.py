@@ -4,6 +4,9 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import httpx
+from google.genai import errors as genai_errors
+
 from src.ai.memory_engine import MemoryEngine
 from src.ai.openrouter_client import OpenRouterClientError
 
@@ -179,7 +182,7 @@ class MemoryEnginePrivacyTests(
 
         self.env_patch.start()
         self.dotenv_patch.start()
-        self.client_patch.start()
+        self.client_factory = self.client_patch.start()
 
     def tearDown(self):
 
@@ -204,6 +207,133 @@ class MemoryEnginePrivacyTests(
         )
 
         return engine
+
+    def process_immediate(self, engine):
+        selector = engine.context_selector
+        if selector is None:
+            selector = FakeContextSelector(
+                selected_items=[
+                    SimpleNamespace(
+                        original_index=0,
+                        text="Remember the meeting tomorrow.",
+                    )
+                ]
+            )
+            engine.context_selector = selector
+        else:
+            selector.selected_items = [
+                SimpleNamespace(
+                    original_index=0,
+                    text="Remember the meeting tomorrow.",
+                )
+            ]
+        return engine.process(
+            mode="immediate",
+            sentences=["Remember the meeting tomorrow."],
+            current_time=datetime.now(),
+        )
+
+    def test_gemini_first_attempt_succeeds_and_client_has_timeout(self):
+        engine = self.make_engine(
+            context_selector=FakeContextSelector()
+        )
+
+        result = self.process_immediate(engine)
+
+        self.assertEqual(result, {"memories": []})
+        self.client.models.generate_content.assert_called_once()
+        client_options = self.client_factory.call_args.kwargs["http_options"]
+        self.assertGreater(client_options.timeout, 0)
+        self.assertEqual(client_options.retry_options.attempts, 1)
+
+    def test_gemini_503_retries_then_succeeds(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = [
+            genai_errors.ServerError(503, {"error": "temporary"}),
+            SimpleNamespace(text='{"memories": []}'),
+        ]
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            self.process_immediate(engine)
+
+        self.assertEqual(self.client.models.generate_content.call_count, 2)
+        sleep.assert_called_once()
+
+    def test_gemini_429_retries_then_succeeds(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = [
+            genai_errors.ClientError(429, {"error": "temporary"}),
+            SimpleNamespace(text='{"memories": []}'),
+        ]
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            self.process_immediate(engine)
+
+        self.assertEqual(self.client.models.generate_content.call_count, 2)
+        sleep.assert_called_once()
+
+    def test_gemini_timeout_is_retried_only_to_attempt_limit(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = [
+            httpx.ReadTimeout("temporary timeout")
+            for _ in range(engine.GEMINI_MAX_ATTEMPTS)
+        ]
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            with self.assertRaises(httpx.ReadTimeout):
+                self.process_immediate(engine)
+
+        self.assertEqual(
+            self.client.models.generate_content.call_count,
+            engine.GEMINI_MAX_ATTEMPTS,
+        )
+        self.assertEqual(sleep.call_count, engine.GEMINI_MAX_ATTEMPTS - 1)
+
+    def test_gemini_network_failure_is_retried(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = [
+            httpx.ConnectError("private transport detail"),
+            SimpleNamespace(text='{"memories": []}'),
+        ]
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            with patch("builtins.print") as logger:
+                self.process_immediate(engine)
+
+        self.assertEqual(self.client.models.generate_content.call_count, 2)
+        sleep.assert_called_once()
+        self.assertNotIn(
+            "private transport detail",
+            " ".join(str(call) for call in logger.call_args_list),
+        )
+
+    def test_invalid_api_key_error_is_not_retried(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = genai_errors.ClientError(
+            400,
+            {"error": "API key not valid"},
+        )
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            with self.assertRaises(genai_errors.ClientError):
+                self.process_immediate(engine)
+
+        self.client.models.generate_content.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_permanent_5xx_status_is_not_retried(self):
+        engine = self.make_engine(context_selector=FakeContextSelector())
+        self.client.models.generate_content.side_effect = genai_errors.ServerError(
+            501,
+            {"error": "not implemented"},
+        )
+
+        with patch("src.ai.memory_engine.time.sleep") as sleep:
+            with self.assertRaises(genai_errors.ServerError):
+                self.process_immediate(engine)
+
+        self.client.models.generate_content.assert_called_once()
+        sleep.assert_not_called()
 
     def test_engine_requires_privacy_or_context_selector(
         self,

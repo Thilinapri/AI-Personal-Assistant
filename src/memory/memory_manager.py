@@ -21,48 +21,67 @@ class MemoryManager:
         self.candidate_threshold = candidate_threshold
 
     def store_memories(self, memories):
-        """Store multiple memories without one failure stopping the batch."""
+        """Store a batch atomically so failures cannot leave partial retries."""
 
         if not memories:
             return []
 
-        print(
-            "[DATABASE] Processing "
-            f"{len(memories)} memories with local storage."
-        )
-        stored_ids = []
-        failed_count = 0
-
-        for memory in memories:
-
-            try:
-                memory_id = self.store_memory(memory)
-                stored_ids.append(memory_id)
-
-            except Exception as error:
-                print(
-                    "[DATABASE] Local memory save failed: "
-                    f"{type(error).__name__}"
-                )
-                failed_count += 1
-
-        print(
-            "[DATABASE] Local storage completed: "
-            f"{len(stored_ids)}/{len(memories)} memory record(s) "
-            "saved or matched."
-        )
-        if failed_count:
+        print(f"[DATABASE] Preparing {len(memories)} memory record(s).")
+        try:
+            prepared = [self._prepare_embedding(memory) for memory in memories]
+        except Exception as error:
             print(
-                "[DATABASE] Failed memory record(s): "
-                f"{failed_count}."
+                "[DATABASE] Embedding preparation failed; "
+                f"no memory rows written: {type(error).__name__}"
             )
+            return []
 
+        stored_ids = []
+        reminder_actions = []
+        try:
+            # Embeddings are generated before the short write transaction.
+            # BEGIN IMMEDIATE serializes candidate lookup and writes across
+            # independent SQLite connections and processes.
+            with self.database.memory_write_transaction():
+                for memory, embedding_data in zip(memories, prepared):
+                    memory_id, reminder_action = (
+                        self._store_memory_in_transaction(
+                            memory,
+                            embedding_data,
+                        )
+                    )
+                    stored_ids.append(memory_id)
+                    if reminder_action is not None:
+                        reminder_actions.append(reminder_action)
+        except Exception as error:
+            print(
+                "[DATABASE] Memory batch rolled back: "
+                f"{type(error).__name__}"
+            )
+            return []
+
+        self._apply_reminder_actions(reminder_actions)
+        print(
+            "[DATABASE] Local transaction committed: "
+            f"{len(stored_ids)}/{len(memories)} memory record(s)."
+        )
         return stored_ids
 
     def store_memory(self, memory):
-        """Store one memory after checking for duplicates or updates."""
+        """Store one memory atomically and return its existing or new ID."""
 
-        candidates = self._find_candidates(memory)
+        stored_ids = self.store_memories([memory])
+        if not stored_ids:
+            raise RuntimeError("Memory and embedding transaction failed.")
+        return stored_ids[0]
+
+    def _store_memory_in_transaction(self, memory, embedding_data):
+        """Classify and persist one memory inside a batch transaction."""
+
+        candidates = self._find_candidates(
+            memory,
+            query_embedding=embedding_data["query_embedding"],
+        )
 
         for candidate in candidates:
 
@@ -82,7 +101,7 @@ class MemoryManager:
                 )
 
                 # Do not create another reminder.
-                return candidate["id"]
+                return candidate["id"], None
 
             # ---------------------------------
             # Update
@@ -95,27 +114,11 @@ class MemoryManager:
                 memory_id = self.database.replace_memory(
                     old_memory_id,
                     memory,
+                    embedding=embedding_data["embedding"],
+                    embedding_model=embedding_data["embedding_model"],
                 )
 
-                self._store_embedding(
-                    memory_id,
-                    memory,
-                )
-
-                if self.reminder_manager is not None:
-
-                    # Cancel reminder belonging to old information.
-                    self.reminder_manager.cancel_for_memory(
-                        old_memory_id
-                    )
-
-                    # Create reminder for the updated memory.
-                    self.reminder_manager.create_for_memory(
-                        memory_id,
-                        memory,
-                    )
-
-                return memory_id
+                return memory_id, ("replace", old_memory_id, memory_id, memory)
 
             # ---------------------------------
             # Related
@@ -128,48 +131,38 @@ class MemoryManager:
         # New or Related Memory
         # ---------------------------------
 
-        memory_id = self.database.insert_memory(memory)
-
-        self._store_embedding(
-            memory_id,
+        memory_id = self.database.insert_memory(
             memory,
+            embedding=embedding_data["embedding"],
+            embedding_model=embedding_data["embedding_model"],
         )
-
-        if self.reminder_manager is not None:
-
-            self.reminder_manager.create_for_memory(
-                memory_id,
-                memory,
-            )
-
-        return memory_id
+        return memory_id, ("create", None, memory_id, memory)
 
     def update_memory(self, memory_id, memory):
         """Update a user-edited memory and refresh related data."""
 
-        existing = self.database.get_memory(
-            memory_id
-        )
-
-        if existing is None:
+        try:
+            embedding_data = self._prepare_embedding(memory)
+            with self.database.memory_write_transaction():
+                existing = self.database.get_memory(memory_id)
+                if existing is None or existing[9] != "active":
+                    return False
+                serialized_embedding = embedding_data["embedding"]
+                embedding_model = embedding_data["embedding_model"]
+                if serialized_embedding is None:
+                    serialized_embedding = existing[14]
+                    embedding_model = existing[15]
+                updated = self.database.update_memory(
+                    memory_id,
+                    memory,
+                    embedding=serialized_embedding,
+                    embedding_model=embedding_model,
+                )
+                if not updated:
+                    return False
+        except Exception as error:
+            print(f"[DATABASE] Memory update rolled back: {type(error).__name__}")
             return False
-
-        if existing[9] != "active":
-            return False
-
-        updated = self.database.update_memory(
-            memory_id,
-            memory,
-        )
-
-        if not updated:
-            return False
-
-        # Regenerate semantic-search embedding.
-        self._store_embedding(
-            memory_id,
-            memory,
-        )
 
         # Replace any old pending reminder.
         if self.reminder_manager is not None:
@@ -219,7 +212,7 @@ class MemoryManager:
 
         return updated_count
 
-    def _find_candidates(self, memory):
+    def _find_candidates(self, memory, query_embedding=None):
         """Find similar active memories stored locally."""
 
         if (
@@ -233,6 +226,7 @@ class MemoryManager:
         results = self.retrieval_service.search(
             memory_text,
             limit=3,
+            query_embedding=query_embedding,
         )
 
         return [
@@ -258,6 +252,43 @@ class MemoryManager:
             json.dumps(embedding),
             self.embedding_service.model_name,
         )
+
+    def _prepare_embedding(self, memory):
+        """Generate vectors and serialized payload before opening a transaction."""
+        query_embedding = None
+        embedding = None
+        embedding_model = None
+        memory_text = self._build_memory_text(memory)
+
+        if self.retrieval_service is not None:
+            query_service = self.retrieval_service.embedding_service
+            query_embedding = query_service.encode(memory_text)
+            if self.embedding_service is query_service:
+                embedding = query_embedding
+                embedding_model = query_service.model_name
+
+        if self.embedding_service is not None and embedding is None:
+            embedding = self.embedding_service.encode(memory_text)
+            embedding_model = self.embedding_service.model_name
+
+        return {
+            "query_embedding": query_embedding,
+            "embedding": json.dumps(embedding) if embedding is not None else None,
+            "embedding_model": embedding_model,
+        }
+
+    def _apply_reminder_actions(self, actions):
+        if self.reminder_manager is None:
+            return
+        for action, old_id, memory_id, memory in actions:
+            try:
+                if action == "replace":
+                    self.reminder_manager.cancel_for_memory(old_id)
+                self.reminder_manager.create_for_memory(memory_id, memory)
+            except Exception as error:
+                # Reminder failures must not misreport an already committed
+                # memory transaction as failed and trigger duplicate retries.
+                print(f"[REMINDER] Post-commit update failed: {type(error).__name__}")
 
     def _build_memory_text(self, memory):
         """Build one searchable text representation of a memory."""

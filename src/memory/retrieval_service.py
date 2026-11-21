@@ -13,13 +13,15 @@ class RetrievalService:
         query,
         limit=5,
         min_score=None,
+        query_embedding=None,
     ):
         """Return the most semantically relevant active memories."""
 
         if not query or not query.strip():
             raise ValueError("Query cannot be empty.")
 
-        query_embedding = self.embedding_service.encode(query)
+        if query_embedding is None:
+            query_embedding = self.embedding_service.encode(query)
 
         memories = self.database.get_active_memories()
 

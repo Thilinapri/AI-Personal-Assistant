@@ -2,7 +2,7 @@ numpy
 requests
 python-dotenv
 sounddevice
-google-genai
+google-genai>=2.15.0
 sentence-transformers
 Flask
 tzdata

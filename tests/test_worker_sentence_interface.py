@@ -1,5 +1,7 @@
 import queue
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 
 from src.worker.audio_worker import AudioWorker
 from src.worker.session_processor import SessionProcessor
@@ -76,7 +78,28 @@ class FakeSessionTranscriptBuffer:
 class FakeMemoryManager:
 
     def store_memories(self, memories):
-        pass
+        return list(range(len(memories)))
+
+
+class SequencedMemoryEngine:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = []
+
+    def process(self, **kwargs):
+        self.calls.append(kwargs)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class PartialMemoryManager:
+    def __init__(self, stored_count):
+        self.stored_count = stored_count
+
+    def store_memories(self, memories):
+        return list(range(min(self.stored_count, len(memories))))
 
 
 class WorkerSentenceInterfaceTests(
@@ -196,6 +219,82 @@ class WorkerSentenceInterfaceTests(
             transcript_buffer.cleared_through,
             2,
         )
+
+    def test_session_failure_retains_transcript_and_next_cycle_recovers(self):
+        transcript_buffer = FakeSessionTranscriptBuffer()
+        memory_engine = SequencedMemoryEngine([
+            RuntimeError("temporary provider failure"),
+            {
+                "summary": "private summary text",
+                "memories": [],
+            },
+        ])
+        processor = SessionProcessor(
+            transcript_buffer=transcript_buffer,
+            memory_engine=memory_engine,
+            memory_manager=FakeMemoryManager(),
+        )
+        output = StringIO()
+
+        with redirect_stdout(output):
+            first_result = processor.process_current_session()
+            self.assertIsNone(transcript_buffer.cleared_through)
+            second_result = processor.process_current_session()
+
+        self.assertFalse(first_result)
+        self.assertTrue(second_result)
+        self.assertEqual(len(memory_engine.calls), 2)
+        self.assertEqual(transcript_buffer.cleared_through, 2)
+        self.assertNotIn("private summary text", output.getvalue())
+
+    def test_session_partial_storage_failure_retains_snapshot(self):
+        transcript_buffer = FakeSessionTranscriptBuffer()
+        memory = {
+            "category": "Note",
+            "title": "Meeting",
+            "content": "Meeting details.",
+            "date": "",
+            "time": "",
+            "notification": False,
+        }
+        processor = SessionProcessor(
+            transcript_buffer=transcript_buffer,
+            memory_engine=SequencedMemoryEngine([
+                {
+                    "summary": "summary",
+                    "memories": [memory, memory],
+                }
+            ]),
+            memory_manager=PartialMemoryManager(stored_count=1),
+        )
+
+        with redirect_stdout(StringIO()):
+            result = processor.process_current_session()
+
+        self.assertFalse(result)
+        self.assertIsNone(transcript_buffer.cleared_through)
+
+    def test_session_processor_skips_concurrent_snapshot_cycle(self):
+        transcript_buffer = FakeSessionTranscriptBuffer()
+        memory_engine = FakeMemoryEngine({
+            "summary": "summary",
+            "memories": [],
+        })
+        processor = SessionProcessor(
+            transcript_buffer=transcript_buffer,
+            memory_engine=memory_engine,
+            memory_manager=FakeMemoryManager(),
+        )
+        processor._process_lock.acquire()
+        try:
+            with redirect_stdout(StringIO()):
+                result = processor.process_current_session()
+        finally:
+            processor._process_lock.release()
+
+        self.assertFalse(result)
+        self.assertEqual(memory_engine.calls, [])
+        self.assertIsNone(transcript_buffer.cleared_through)
 
 
 if __name__ == "__main__":

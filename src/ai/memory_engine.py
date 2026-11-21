@@ -1,18 +1,25 @@
 import json
 import os
+import random
+import time
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
+import httpx
 
 from src.ai.prompt_builder import PromptBuilder
 from src.ai.openrouter_client import OpenRouterClient
-from src.config import GEMINI_MODEL, MEMORY_LLM_PROVIDER
+from src.config import (
+    GEMINI_MODEL,
+    GEMINI_REQUEST_TIMEOUT_MS,
+    MEMORY_LLM_PROVIDER,
+)
 
 
 class MemoryEngine:
-    """
-    Cloud-backed memory extraction engine.
+    """Cloud-backed memory extraction engine.
 
     Privacy Gateway is optional.
 
@@ -27,6 +34,20 @@ class MemoryEngine:
         -> Context Selector
         -> Gemini
     """
+
+    GEMINI_MAX_ATTEMPTS = 3
+    GEMINI_RETRY_BASE_DELAY_SECONDS = 0.5
+    GEMINI_RETRY_MAX_DELAY_SECONDS = 3.0
+    GEMINI_RETRY_JITTER_SECONDS = 0.25
+    GEMINI_RETRYABLE_HTTP_STATUSES = {
+        408,
+        429,
+        500,
+        502,
+        503,
+        504,
+        529,
+    }
 
     def __init__(
         self,
@@ -81,7 +102,15 @@ class MemoryEngine:
                 )
 
             self.client = genai.Client(
-                api_key=api_key
+                api_key=api_key,
+                http_options=types.HttpOptions(
+                    timeout=GEMINI_REQUEST_TIMEOUT_MS,
+                    retry_options=types.HttpRetryOptions(
+                        # Retries are handled below so each attempt has
+                        # one bounded SDK request and one clear log entry.
+                        attempts=1,
+                    ),
+                ),
             )
 
         else:
@@ -201,17 +230,9 @@ class MemoryEngine:
 
         if self.provider == "gemini":
 
-            response = (
-                self.client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.2,
-                        response_mime_type=(
-                            "application/json"
-                        ),
-                    ),
-                )
+            response = self._generate_gemini_content(
+                mode=mode,
+                prompt=prompt,
             )
 
             response_text = response.text
@@ -274,6 +295,92 @@ class MemoryEngine:
             )
 
         return result
+
+    def _generate_gemini_content(self, mode, prompt):
+        """Make bounded, timed Gemini attempts without logging prompt data."""
+
+        for attempt in range(1, self.GEMINI_MAX_ATTEMPTS + 1):
+            print(
+                "[MEMORY] Gemini request started "
+                f"(mode={mode}, attempt={attempt}/"
+                f"{self.GEMINI_MAX_ATTEMPTS})."
+            )
+            try:
+                response = self.client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                        response_mime_type="application/json",
+                    ),
+                )
+                print(
+                    "[MEMORY] Gemini response received "
+                    f"(mode={mode}, attempt={attempt})."
+                )
+                return response
+            except Exception as error:
+                category = self._transient_gemini_failure_category(error)
+                if category is None:
+                    print(
+                        "[MEMORY] Gemini request failed "
+                        f"(mode={mode}, attempt={attempt}, "
+                        f"category={self._safe_failure_category(error)}); "
+                        "not retrying."
+                    )
+                    raise
+
+                if attempt >= self.GEMINI_MAX_ATTEMPTS:
+                    print(
+                        "[MEMORY] Gemini request failed after "
+                        f"{attempt} attempts "
+                        f"(mode={mode}, category={category})."
+                    )
+                    raise
+
+                delay = min(
+                    self.GEMINI_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+                    self.GEMINI_RETRY_MAX_DELAY_SECONDS,
+                ) + random.uniform(0, self.GEMINI_RETRY_JITTER_SECONDS)
+                print(
+                    "[MEMORY] Gemini temporary failure; retrying "
+                    f"(mode={mode}, attempt={attempt}/"
+                    f"{self.GEMINI_MAX_ATTEMPTS}, category={category}, "
+                    f"delay={delay:.2f}s)."
+                )
+                time.sleep(delay)
+
+        raise RuntimeError("Gemini request attempts exhausted.")
+
+    @staticmethod
+    def _transient_gemini_failure_category(error):
+        if isinstance(error, genai_errors.APIError):
+            try:
+                status = int(error.code)
+            except (TypeError, ValueError):
+                return None
+            if status in MemoryEngine.GEMINI_RETRYABLE_HTTP_STATUSES:
+                return f"http_{status}"
+            return None
+
+        if isinstance(error, httpx.TimeoutException):
+            return "timeout"
+        if isinstance(error, httpx.TransportError):
+            return "network"
+        return None
+
+    @staticmethod
+    def _safe_failure_category(error):
+        if isinstance(error, genai_errors.APIError):
+            try:
+                return f"http_{int(error.code)}"
+            except (TypeError, ValueError):
+                return "api_error"
+        if isinstance(error, httpx.TimeoutException):
+            return "timeout"
+        if isinstance(error, httpx.TransportError):
+            return "network"
+        return type(error).__name__
 
     def _prepare_with_privacy(
         self,

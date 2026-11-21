@@ -37,6 +37,7 @@ class SessionProcessor:
         self.memory_manager = memory_manager
         self.interval_seconds = interval_seconds
         self._stop_event = threading.Event()
+        self._process_lock = threading.Lock()
         self._thread = None
 
     def start(self):
@@ -70,10 +71,25 @@ class SessionProcessor:
                 self.process_current_session()
             except Exception as error:
                 # Keep the scheduler alive if an unexpected cycle error occurs.
-                print(f"Session processing failed: {error}")
+                print(
+                    "[SESSION] Processing cycle failed: "
+                    f"{type(error).__name__}"
+                )
 
     def process_current_session(self):
         """Process and acknowledge one stable transcript snapshot."""
+
+        if not self._process_lock.acquire(blocking=False):
+            print("[SESSION] A processing cycle is already active; skipping.")
+            return False
+
+        try:
+            return self._process_snapshot()
+        finally:
+            self._process_lock.release()
+
+    def _process_snapshot(self):
+        """Process one snapshot while the cycle lock is held."""
 
         snapshot = self.transcript_buffer.snapshot()
         entries = snapshot["entries"]
@@ -93,23 +109,38 @@ class SessionProcessor:
                 current_time=datetime.now(),
             )
         except Exception as error:
-            print(f"Session Gemini processing failed: {error}")
+            print(
+                "[SESSION] Gemini summary failed: "
+                f"{type(error).__name__}"
+            )
             return False
 
         try:
             summary, memories = self._validate_response(response)
         except ValueError as error:
-            print(f"Session response validation failed: {error}")
+            print(
+                "[SESSION] Response validation failed: "
+                f"{type(error).__name__}"
+            )
             return False
 
         try:
             if memories:
-                self.memory_manager.store_memories(memories)
+                stored_ids = self.memory_manager.store_memories(memories)
+                if len(stored_ids or []) != len(memories):
+                    print(
+                        "[SESSION] Local storage incomplete; "
+                        "transcript retained."
+                    )
+                    return False
         except Exception as error:
-            print(f"Session memory saving failed: {error}")
+            print(
+                "[SESSION] Local memory storage failed: "
+                f"{type(error).__name__}"
+            )
             return False
 
-        print(f"Session summary: {summary}")
+        print("[SESSION] Summary and memory processing completed.")
         self.transcript_buffer.clear_through(snapshot["last_entry_id"])
         return True
 

@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -22,10 +23,44 @@ class Database:
 
         self.cursor = self.connection.cursor()
 
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
 
         self.create_tables()
         self.migrate_memories_table()
+
+    @contextmanager
+    def memory_write_transaction(self):
+        """Serialize a memory decision and its writes across SQLite clients."""
+
+        with self.lock:
+            if self.connection.in_transaction:
+                raise RuntimeError(
+                    "A memory write transaction is already active."
+                )
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self.connection.commit()
+            except BaseException:
+                self.connection.rollback()
+                raise
+
+    @contextmanager
+    def _write_transaction(self):
+        """Preserve an outer transaction when a write helper is nested."""
+
+        with self.lock:
+            owns_transaction = not self.connection.in_transaction
+            if owns_transaction:
+                self.connection.execute("BEGIN")
+            try:
+                yield
+                if owns_transaction:
+                    self.connection.commit()
+            except BaseException:
+                if owns_transaction:
+                    self.connection.rollback()
+                raise
 
     def create_tables(self):
 
@@ -197,12 +232,18 @@ class Database:
                 self.connection.rollback()
                 raise
 
-    def insert_memory(self, memory, supersedes_id=None):
+    def insert_memory(
+        self,
+        memory,
+        supersedes_id=None,
+        embedding=None,
+        embedding_model=None,
+    ):
         """Insert one active memory and return its database ID."""
 
         with self.lock:
 
-            with self.connection:
+            with self._write_transaction():
 
                 cursor = self.connection.execute("""
                     INSERT INTO memories
@@ -217,7 +258,9 @@ class Database:
                         updated_at,
                         last_seen_at,
                         seen_count,
-                        supersedes_id
+                        supersedes_id,
+                        embedding,
+                        embedding_model
                     )
                     VALUES (
                         ?, ?, ?, ?, ?, ?,
@@ -225,7 +268,7 @@ class Database:
                         CURRENT_TIMESTAMP,
                         CURRENT_TIMESTAMP,
                         1,
-                        ?
+                        ?, ?, ?
                     )
                 """, (
                     memory["category"],
@@ -235,16 +278,24 @@ class Database:
                     memory["time"],
                     int(memory["notification"]),
                     supersedes_id,
+                    embedding,
+                    embedding_model,
                 ))
 
                 return cursor.lastrowid
 
-    def replace_memory(self, old_memory_id, new_memory):
+    def replace_memory(
+        self,
+        old_memory_id,
+        new_memory,
+        embedding=None,
+        embedding_model=None,
+    ):
         """Replace an older memory with a new active version."""
 
         with self.lock:
 
-            with self.connection:
+            with self._write_transaction():
 
                 cursor = self.connection.execute("""
                     INSERT INTO memories
@@ -259,7 +310,9 @@ class Database:
                         updated_at,
                         last_seen_at,
                         seen_count,
-                        supersedes_id
+                        supersedes_id,
+                        embedding,
+                        embedding_model
                     )
                     VALUES (
                         ?, ?, ?, ?, ?, ?,
@@ -267,7 +320,7 @@ class Database:
                         CURRENT_TIMESTAMP,
                         CURRENT_TIMESTAMP,
                         1,
-                        ?
+                        ?, ?, ?
                     )
                 """, (
                     new_memory["category"],
@@ -277,6 +330,8 @@ class Database:
                     new_memory["time"],
                     int(new_memory["notification"]),
                     old_memory_id,
+                    embedding,
+                    embedding_model,
                 ))
 
                 new_memory_id = cursor.lastrowid
@@ -330,11 +385,17 @@ class Database:
                     (memory_id,)
                 )
 
-    def update_memory(self, memory_id, memory):
+    def update_memory(
+        self,
+        memory_id,
+        memory,
+        embedding=None,
+        embedding_model=None,
+    ):
         """Update one existing active memory."""
 
         with self.lock:
-            with self.connection:
+            with self._write_transaction():
 
                 cursor = self.connection.execute("""
                     UPDATE memories
@@ -345,6 +406,8 @@ class Database:
                         date = ?,
                         time = ?,
                         notification = ?,
+                        embedding = ?,
+                        embedding_model = ?,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                       AND status = 'active'
@@ -355,6 +418,8 @@ class Database:
                     memory["date"],
                     memory["time"],
                     int(memory["notification"]),
+                    embedding,
+                    embedding_model,
                     memory_id,
                 ))
 
@@ -434,7 +499,7 @@ class Database:
 
         with self.lock:
 
-            with self.connection:
+            with self._write_transaction():
 
                 self.connection.execute("""
                     UPDATE memories
@@ -449,7 +514,7 @@ class Database:
 
         with self.lock:
 
-            with self.connection:
+            with self._write_transaction():
 
                 self.connection.execute("""
                     UPDATE memories

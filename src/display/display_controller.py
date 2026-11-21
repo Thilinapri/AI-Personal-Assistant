@@ -48,6 +48,9 @@ NEXT_BUTTON_PIN = 13
 BUTTON_POLL_DELAY = 0.03
 BUTTON_DEBOUNCE_DELAY = 0.25
 
+UPDATE_HOLD_SECONDS = 5.0
+UPDATE_REQUEST_FILE = "/home/pi4/echomind-deploy/update.request"
+
 SCREENS = [
     "home",
     "reminder",
@@ -97,6 +100,8 @@ class DisplayWorker(threading.Thread):
         self.previous_button_time = 0
         self.listening_button_time = 0
         self.next_button_time = 0
+        self.next_button_pressed_at = None
+        self.update_request_sent = False
 
         self.data_changed = True
         self.transcript_changed = True
@@ -303,13 +308,43 @@ class DisplayWorker(threading.Thread):
 
         next_state = GPIO.input(NEXT_BUTTON_PIN)
 
+        # Detect a new NEXT-button press.
         if (
             next_state == GPIO.LOW
             and self.next_button_state == GPIO.HIGH
             and now - self.next_button_time >= BUTTON_DEBOUNCE_DELAY
         ):
             self.next_button_time = now
-            self.change_screen(1)
+            self.next_button_pressed_at = now
+            self.update_request_sent = False
+
+        # A five-second hold requests a software update.
+        if (
+            next_state == GPIO.LOW
+            and self.next_button_pressed_at is not None
+            and not self.update_request_sent
+            and now - self.next_button_pressed_at >= UPDATE_HOLD_SECONDS
+        ):
+            try:
+                with open(UPDATE_REQUEST_FILE, "a") as request:
+                    request.write(f"{time.time()}\n")
+
+                self.update_request_sent = True
+                print("Display: Software update requested.")
+
+            except OSError as error:
+                print("Display: Could not request update:", repr(error))
+
+        # A short press changes the screen when released.
+        if next_state == GPIO.HIGH and self.next_button_state == GPIO.LOW:
+            if (
+                self.next_button_pressed_at is not None
+                and not self.update_request_sent
+            ):
+                self.change_screen(1)
+
+            self.next_button_pressed_at = None
+            self.update_request_sent = False
 
         self.next_button_state = next_state
 

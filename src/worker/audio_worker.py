@@ -46,10 +46,15 @@ class AudioWorker:
                 self.process_audio(audio)
 
             except Exception as error:
-                print(f"Audio worker error: {error}")
+                print(
+                    "[AUDIO] Worker chunk failed; continuing: "
+                    f"{type(error).__name__}"
+                )
 
             finally:
                 self.audio_queue.task_done()
+                if audio is not None:
+                    print("[AUDIO] Waiting for next chunk.")
 
     def process_audio(self, audio):
         """Transcribe audio and process keyword-triggered memories."""
@@ -59,11 +64,9 @@ class AudioWorker:
         # -------------------------------------------------
 
         try:
+            print("[STT] Starting transcription.")
             transcription = self.stt_service.transcribe(audio)
-
-            print(
-                f"\n📝 Speech transcription: {transcription!r}"
-            )
+            print("[STT] Transcription completed.")
 
             if self._stop_event.is_set():
                 print(
@@ -73,7 +76,8 @@ class AudioWorker:
 
         except Exception as error:
             print(
-                f"Speech transcription failed: {error}"
+                "[STT] Transcription failed: "
+                f"{type(error).__name__}"
             )
             return
 
@@ -88,11 +92,12 @@ class AudioWorker:
                 self.transcript_callback(transcription)
             except Exception as error:
                 print(
-                    f"Display transcript update failed: {error}"
+                    "[DISPLAY] Transcript update failed: "
+                    f"{type(error).__name__}"
                 )
 
         # -------------------------------------------------
-        # 2. Add transcription to conversation buffer
+        # 2. Add transcription to the session transcript buffer
         # -------------------------------------------------
 
         try:
@@ -104,13 +109,12 @@ class AudioWorker:
                 )
             )
 
-            print(
-                f"📥 Transcript buffered: {transcription}"
-            )
+            print("[AUDIO] Transcript buffered for memory analysis.")
 
         except Exception as error:
             print(
-                f"Transcript buffering failed: {error}"
+                "[AUDIO] Transcript buffering failed: "
+                f"{type(error).__name__}"
             )
             return
 
@@ -125,13 +129,13 @@ class AudioWorker:
                 )
             )
 
-            print(
-                f"🔎 Keyword detected: {should_process}"
-            )
+            if should_process:
+                print("[KEYWORD] Immediate memory trigger detected.")
 
         except Exception as error:
             print(
-                f"Keyword detection failed: {error}"
+                "[KEYWORD] Detection failed: "
+                f"{type(error).__name__}"
             )
             return
 
@@ -144,12 +148,7 @@ class AudioWorker:
         # -------------------------------------------------
 
         try:
-            print("📋 Immediate context:")
-            print(context)
-
-            print(
-                "🤖 Sending immediate context to Gemini..."
-            )
+            print("[MEMORY] Extraction started.")
 
             if self._stop_event.is_set():
                 print(
@@ -164,24 +163,21 @@ class AudioWorker:
             )
 
             memories = result.get("memories", [])
-
             print(
-                f"🤖 Gemini result: {result!r}"
-            )
-
-            print(
-                f"🧠 Memories extracted: {memories!r}"
+                "[MEMORY] Extraction completed: "
+                f"{len(memories)} candidate(s)."
             )
 
         except Exception as error:
             print(
-                f"Immediate memory processing failed: {error}"
+                "[MEMORY] Extraction failed: "
+                f"{type(error).__name__}"
             )
             return
 
         # Gemini found nothing.
         if not memories:
-            print("ℹ️ Gemini found no memories.")
+            print("[MEMORY] No useful memories found.")
             return
 
         # -------------------------------------------------
@@ -190,14 +186,12 @@ class AudioWorker:
 
         try:
             self.memory_manager.store_memories(memories)
-
-            print(
-                "💾 Memories saved through MemoryManager."
-            )
+            print("[DATABASE] Existing memory storage completed.")
 
         except Exception as error:
             print(
-                f"Saving memories failed: {error}"
+                "[DATABASE] Memory storage failed: "
+                f"{type(error).__name__}"
             )
             return
 
@@ -215,5 +209,6 @@ class AudioWorker:
 
         except Exception as error:
             print(
-                f"Removing immediate transcript failed: {error}"
+                "[AUDIO] Transcript cleanup failed: "
+                f"{type(error).__name__}"
             )

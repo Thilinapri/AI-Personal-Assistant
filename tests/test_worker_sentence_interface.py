@@ -95,7 +95,7 @@ class WorkerSentenceInterfaceTests(
 
         worker = AudioWorker(
             audio_queue=queue.Queue(),
-            whisper=FakeWhisper(),
+            stt_service=FakeWhisper(),
             transcript_buffer=(
                 FakeAudioTranscriptBuffer()
             ),

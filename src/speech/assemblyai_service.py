@@ -121,7 +121,7 @@ class AssemblyAIService:
 
             print(
                 f"❌ AssemblyAI request failed "
-                f"after {elapsed:.2f}s: {error}"
+                f"after {elapsed:.2f}s: {type(error).__name__}"
             )
 
             raise
@@ -156,10 +156,6 @@ class AssemblyAIService:
                 f"   Server processing: "
                 f"{server_time_ms:.0f} ms"
             )
-
-        print(
-            f"📝 Transcript: {text!r}"
-        )
 
         return text
 

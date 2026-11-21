@@ -16,6 +16,9 @@ class AudioChunker:
     """
 
     CHUNK_SECONDS = 20
+    MAX_CAPTURE_RECOVERY_ATTEMPTS = 3
+    MAX_DATABASE_ERRORS = 3
+    RECOVERY_BASE_DELAY_SECONDS = 0.5
 
     def __init__(self, microphone, audio_queue, database):
         self.microphone = microphone
@@ -64,27 +67,53 @@ class AudioChunker:
             "\n🎧 Continuous listening started...\n"
         )
 
-        audio_buffer = np.empty(
-            self.chunk_samples,
-            dtype=np.float32,
-        )
-
-        position = 0
-        is_paused = False
-
         try:
-            while not self._stop_event.is_set():
+            audio_buffer = np.empty(
+                self.chunk_samples,
+                dtype=np.float32,
+            )
 
-                listening_enabled = (
-                    self.database.get_listening_enabled()
-                )
+            position = 0
+            is_paused = False
+            database_errors = 0
+            capture_errors = 0
+
+            while not self._stop_event.is_set():
+                try:
+                    listening_enabled = (
+                        self.database.get_listening_enabled()
+                    )
+                    database_errors = 0
+                except Exception as error:
+                    database_errors += 1
+                    print(
+                        "[AUDIO] Listening-state read failed "
+                        f"({database_errors}/"
+                        f"{self.MAX_DATABASE_ERRORS}): "
+                        f"{type(error).__name__}"
+                    )
+                    if database_errors >= self.MAX_DATABASE_ERRORS:
+                        print(
+                            "[AUDIO] Capture stopped after repeated "
+                            "listening-state errors."
+                        )
+                        return
+                    if self._wait_before_retry(database_errors):
+                        return
+                    continue
 
                 if not listening_enabled:
 
                     if not is_paused:
                         position = 0
 
-                        self.microphone.stop()
+                        try:
+                            self.microphone.stop()
+                        except Exception as error:
+                            print(
+                                "[AUDIO] Microphone stop failed while "
+                                f"pausing: {type(error).__name__}"
+                            )
 
                         is_paused = True
 
@@ -98,8 +127,19 @@ class AudioChunker:
                     continue
 
                 if is_paused:
-
-                    self.microphone.start()
+                    try:
+                        self.microphone.start()
+                    except Exception as error:
+                        capture_errors += 1
+                        if capture_errors > self.MAX_CAPTURE_RECOVERY_ATTEMPTS:
+                            print(
+                                "[AUDIO] Capture stopped after repeated "
+                                "microphone failures."
+                            )
+                            return
+                        position = 0
+                        if not self._recover_microphone(error):
+                            return
 
                     is_paused = False
 
@@ -108,25 +148,55 @@ class AudioChunker:
                         "Microphone capture started."
                     )
 
-                audio = self.microphone.read()
+                try:
+                    audio = self.microphone.read()
+                    capture_errors = 0
+                except Exception as error:
+                    capture_errors += 1
+                    if capture_errors > self.MAX_CAPTURE_RECOVERY_ATTEMPTS:
+                        print(
+                            "[AUDIO] Capture stopped after repeated "
+                            "microphone failures."
+                        )
+                        try:
+                            self.microphone.stop()
+                        except Exception as stop_error:
+                            print(
+                                "[AUDIO] Final stream cleanup reported: "
+                                f"{type(stop_error).__name__}"
+                            )
+                        return
+                    position = 0
+                    if not self._recover_microphone(error):
+                        return
+                    is_paused = False
+                    continue
 
-                samples = audio.shape[0]
+                try:
+                    samples = audio.shape[0]
 
-                remaining_samples = (
-                    self.chunk_samples - position
-                )
+                    remaining_samples = (
+                        self.chunk_samples - position
+                    )
 
-                samples_to_copy = min(
-                    samples,
-                    remaining_samples,
-                )
+                    samples_to_copy = min(
+                        samples,
+                        remaining_samples,
+                    )
 
-                self._copy_audio_samples(
-                    audio_buffer=audio_buffer,
-                    position=position,
-                    audio=audio,
-                    samples_to_copy=samples_to_copy,
-                )
+                    self._copy_audio_samples(
+                        audio_buffer=audio_buffer,
+                        position=position,
+                        audio=audio,
+                        samples_to_copy=samples_to_copy,
+                    )
+                except Exception as error:
+                    position = 0
+                    print(
+                        "[AUDIO] Invalid microphone block discarded: "
+                        f"{type(error).__name__}"
+                    )
+                    continue
 
                 position += samples_to_copy
 
@@ -138,17 +208,17 @@ class AudioChunker:
                 position = 0
 
                 print(
-                    "🎙️ Audio chunk ready "
-                    f"({self.CHUNK_SECONDS}s)"
+                    f"[AUDIO] Chunk captured ({self.CHUNK_SECONDS}s)."
                 )
 
                 self._enqueue_chunk(chunk)
+                print("[AUDIO] Waiting for next chunk.")
 
         except Exception as error:
 
             print(
-                "Continuous audio capture "
-                f"error: {error}"
+                "[AUDIO] Capture loop stopped by an unexpected error: "
+                f"{type(error).__name__}"
             )
 
         finally:
@@ -156,6 +226,56 @@ class AudioChunker:
             print(
                 "🎧 Continuous listening stopped."
             )
+
+    def _wait_before_retry(self, attempt):
+        delay = min(
+            self.RECOVERY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+            2.0,
+        )
+        return self._stop_event.wait(delay)
+
+    def _recover_microphone(self, error):
+        """Reopen a failed stream with bounded backoff and no parallel stream."""
+        print(
+            "[AUDIO] Microphone capture failed; restarting stream: "
+            f"{type(error).__name__}"
+        )
+
+        try:
+            self.microphone.stop()
+        except Exception as stop_error:
+            print(
+                "[AUDIO] Stream cleanup reported: "
+                f"{type(stop_error).__name__}"
+            )
+
+        for attempt in range(1, self.MAX_CAPTURE_RECOVERY_ATTEMPTS + 1):
+            if self._wait_before_retry(attempt):
+                return False
+
+            try:
+                self.microphone.start()
+                print("[AUDIO] Microphone stream recovered.")
+                return True
+            except Exception as restart_error:
+                print(
+                    "[AUDIO] Microphone restart failed "
+                    f"({attempt}/{self.MAX_CAPTURE_RECOVERY_ATTEMPTS}): "
+                    f"{type(restart_error).__name__}"
+                )
+                try:
+                    self.microphone.stop()
+                except Exception as stop_error:
+                    print(
+                        "[AUDIO] Stream cleanup reported: "
+                        f"{type(stop_error).__name__}"
+                    )
+
+        print(
+            "[AUDIO] Capture stopped after exhausting microphone "
+            "restart attempts."
+        )
+        return False
 
     def _copy_audio_samples(
         self,

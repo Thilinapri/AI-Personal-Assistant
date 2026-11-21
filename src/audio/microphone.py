@@ -50,7 +50,7 @@ class Microphone:
         if self.stream is not None:
             return
 
-        self.stream = sd.InputStream(
+        stream = sd.InputStream(
             device=self.device,
             samplerate=SAMPLE_RATE,
             channels=CHANNELS,
@@ -58,7 +58,19 @@ class Microphone:
             dtype="float32"
         )
 
-        self.stream.start()
+        try:
+            stream.start()
+        except Exception:
+            try:
+                stream.close()
+            except Exception as close_error:
+                print(
+                    "Microphone cleanup after start failure failed:",
+                    type(close_error).__name__,
+                )
+            raise
+
+        self.stream = stream
         print("Microphone started.")
 
     def read(self):
@@ -79,9 +91,16 @@ class Microphone:
     def stop(self):
         """Stop and close microphone audio capture."""
 
-        if self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
+        stream = self.stream
+        if stream is not None:
+            try:
+                stream.stop()
+            finally:
+                try:
+                    stream.close()
+                finally:
+                    # Clear the reference even when stop/close raises so a
+                    # later start can attempt to create a fresh stream.
+                    self.stream = None
 
         print("Microphone stopped.")

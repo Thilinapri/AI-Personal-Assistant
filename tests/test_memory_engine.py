@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src.ai.memory_engine import MemoryEngine
+from src.ai.openrouter_client import OpenRouterClientError
 
 
 class FakePrivacyGateway:
@@ -195,6 +196,7 @@ class MemoryEnginePrivacyTests(
         engine = MemoryEngine(
             privacy_gateway=gateway,
             context_selector=context_selector,
+            provider="gemini",
         )
 
         engine.prompt_builder = (
@@ -213,6 +215,7 @@ class MemoryEnginePrivacyTests(
             MemoryEngine(
                 privacy_gateway=None,
                 context_selector=None,
+                provider="gemini",
             )
 
     def test_privacy_gateway_is_optional_when_context_selector_exists(
@@ -597,6 +600,364 @@ class MemoryEnginePrivacyTests(
                 "memories": [],
             },
         )
+
+
+class OpenRouterMemoryEngineTests(unittest.TestCase):
+
+    def setUp(self):
+        self.router_patcher = patch(
+            "src.ai.memory_engine.OpenRouterClient"
+        )
+        self.gemini_patcher = patch(
+            "src.ai.memory_engine.genai.Client"
+        )
+        self.dotenv_patcher = patch(
+            "src.ai.memory_engine.load_dotenv"
+        )
+        self.router_class = self.router_patcher.start()
+        self.gemini_class = self.gemini_patcher.start()
+        self.dotenv_patcher.start()
+        self.router = self.router_class.return_value
+        self.router.generate_text.return_value = (
+            '{"memories": []}'
+        )
+
+    def tearDown(self):
+        self.dotenv_patcher.stop()
+        self.gemini_patcher.stop()
+        self.router_patcher.stop()
+
+    def make_engine(
+        self,
+        gateway=None,
+        context_selector=None,
+    ):
+        if gateway is None and context_selector is None:
+            context_selector = FakeContextSelector()
+
+        engine = MemoryEngine(
+            privacy_gateway=gateway,
+            context_selector=context_selector,
+            provider="openrouter",
+        )
+        engine.prompt_builder = FakePromptBuilder()
+        return engine
+
+    def test_initialization_uses_only_openrouter(self):
+        self.make_engine()
+        self.router_class.assert_called_once_with()
+        self.gemini_class.assert_not_called()
+
+    def test_gemini_key_is_not_required(self):
+        with patch.dict(
+            os.environ,
+            {"GEMINI_API_KEY": ""},
+        ):
+            self.make_engine()
+
+        self.router_class.assert_called_once()
+        self.gemini_class.assert_not_called()
+
+    def test_immediate_prompt_reaches_openrouter(self):
+        selector = FakeContextSelector(
+            selected_items=[
+                SimpleNamespace(
+                    original_index=0,
+                    text="Remember the dentist appointment.",
+                )
+            ]
+        )
+        engine = self.make_engine(
+            context_selector=selector
+        )
+
+        engine.process(
+            mode="immediate",
+            sentences=[
+                "Remember the dentist appointment."
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.router.generate_text.assert_called_once_with(
+            "PROMPT::Remember the dentist appointment."
+        )
+
+    def test_summary_prompt_reaches_openrouter(self):
+        selector = FakeContextSelector(
+            selected_items=[
+                SimpleNamespace(
+                    original_index=0,
+                    text="The team meeting is tomorrow.",
+                )
+            ]
+        )
+        engine = self.make_engine(
+            context_selector=selector
+        )
+
+        engine.process(
+            mode="summary",
+            sentences=[
+                "The team meeting is tomorrow.",
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.router.generate_text.assert_called_once_with(
+            "PROMPT::The team meeting is tomorrow."
+        )
+
+    def test_openrouter_json_is_parsed_into_memory_structure(self):
+        self.router.generate_text.return_value = (
+            '{"memories": [{"category": "Reminder", '
+            '"title": "Dentist", "content": "Dentist appointment", '
+            '"date": "", "time": "", "notification": true, '
+            '"reminder_before_hours": 2}]}'
+        )
+        engine = self.make_engine()
+
+        result = engine.process(
+            mode="immediate",
+            sentences=["Dentist appointment tomorrow."],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result["memories"][0]["title"],
+            "Dentist",
+        )
+        self.assertTrue(
+            result["memories"][0]["notification"]
+        )
+
+    def test_immediate_and_summary_output_structures(self):
+        engine = self.make_engine(
+            context_selector=FakeContextSelector(
+                selected_items=[
+                    SimpleNamespace(
+                        original_index=0,
+                        text="Meeting discussed tomorrow.",
+                    )
+                ]
+            )
+        )
+
+        self.router.generate_text.return_value = (
+            '{"memories": []}'
+        )
+        immediate = engine.process(
+            mode="immediate",
+            sentences=["Remember this."],
+            current_time=datetime.now(),
+        )
+        self.assertEqual(
+            immediate,
+            {"memories": []},
+        )
+
+        self.router.generate_text.return_value = (
+            '{"summary": "Meeting discussed.", "memories": []}'
+        )
+        summary = engine.process(
+            mode="summary",
+            sentences=["Meeting discussed tomorrow."],
+            current_time=datetime.now(),
+        )
+        self.assertEqual(
+            summary,
+            {
+                "summary": "Meeting discussed.",
+                "memories": [],
+            },
+        )
+
+    def test_unsupported_provider_is_rejected(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Unsupported memory LLM provider",
+        ):
+            MemoryEngine(
+                privacy_gateway=None,
+                context_selector=FakeContextSelector(),
+                provider="unsupported",
+            )
+
+        self.router_class.assert_not_called()
+        self.gemini_class.assert_not_called()
+
+    def test_blocked_privacy_gateway_prevents_openrouter(self):
+        gateway = FakePrivacyGateway(
+            result=SimpleNamespace(
+                cloud_allowed=False
+            )
+        )
+        engine = self.make_engine(gateway=gateway)
+
+        result = engine.process(
+            mode="immediate",
+            sentences=["Raw private information."],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {"memories": []},
+        )
+        self.router.generate_text.assert_not_called()
+
+    def test_privacy_gateway_exception_prevents_openrouter(self):
+        gateway = FakePrivacyGateway(
+            error=RuntimeError("privacy failure")
+        )
+        engine = self.make_engine(gateway=gateway)
+
+        result = engine.process(
+            mode="immediate",
+            sentences=["Raw private information."],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {"memories": []},
+        )
+        self.router.generate_text.assert_not_called()
+
+    def test_only_sanitized_capsule_reaches_openrouter(self):
+        gateway = FakePrivacyGateway(
+            result=SimpleNamespace(
+                cloud_allowed=True,
+                capsule=SimpleNamespace(
+                    text="Email <EMAIL_1> tomorrow."
+                ),
+                mapping={
+                    "<EMAIL_1>": "person@example.com"
+                },
+            )
+        )
+        engine = self.make_engine(gateway=gateway)
+
+        engine.process(
+            mode="immediate",
+            sentences=[
+                "Email person@example.com tomorrow."
+            ],
+            current_time=datetime.now(),
+        )
+
+        prompt = engine.prompt_builder.calls[0]["text"]
+        self.assertEqual(
+            prompt,
+            "Email <EMAIL_1> tomorrow.",
+        )
+        self.assertNotIn(
+            "person@example.com",
+            prompt,
+        )
+        self.router.generate_text.assert_called_once()
+
+    def test_output_validation_precedes_rehydration(self):
+        gateway = FakePrivacyGateway(
+            result=SimpleNamespace(
+                cloud_allowed=True,
+                capsule=SimpleNamespace(
+                    text="Safe <EMAIL_1> context."
+                ),
+                mapping={
+                    "<EMAIL_1>": "person@example.com"
+                },
+            ),
+            output_safe=False,
+        )
+        gateway.rehydrate_output = MagicMock(
+            side_effect=gateway.rehydrate_output
+        )
+        engine = self.make_engine(gateway=gateway)
+        self.router.generate_text.return_value = (
+            '{"memories": [{"content": "Use Secret123"}]}'
+        )
+
+        result = engine.process(
+            mode="immediate",
+            sentences=["Safe context."],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result,
+            {"memories": []},
+        )
+        self.assertEqual(
+            len(gateway.validation_calls),
+            1,
+        )
+        gateway.rehydrate_output.assert_not_called()
+
+    def test_validated_output_is_rehydrated_locally(self):
+        gateway = FakePrivacyGateway(
+            result=SimpleNamespace(
+                cloud_allowed=True,
+                capsule=SimpleNamespace(
+                    text="Email <EMAIL_1> tomorrow."
+                ),
+                mapping={
+                    "<EMAIL_1>": "person@example.com"
+                },
+            )
+        )
+        engine = self.make_engine(gateway=gateway)
+        self.router.generate_text.return_value = (
+            '{"memories": [{"content": "Email <EMAIL_1> tomorrow"}]}'
+        )
+
+        result = engine.process(
+            mode="immediate",
+            sentences=[
+                "Email person@example.com tomorrow."
+            ],
+            current_time=datetime.now(),
+        )
+
+        self.assertEqual(
+            result["memories"][0]["content"],
+            "Email person@example.com tomorrow",
+        )
+
+    def test_invalid_model_json_raises_safe_error(self):
+        engine = self.make_engine()
+        self.router.generate_text.return_value = (
+            "raw secret response"
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Invalid JSON returned by the memory provider",
+        ):
+            engine.process(
+                mode="immediate",
+                sentences=["Remember this."],
+                current_time=datetime.now(),
+            )
+
+    def test_openrouter_error_does_not_trigger_gemini(self):
+        engine = self.make_engine()
+        self.router.generate_text.side_effect = (
+            OpenRouterClientError(
+                "OpenRouter request failed."
+            )
+        )
+
+        with self.assertRaises(
+            OpenRouterClientError
+        ):
+            engine.process(
+                mode="immediate",
+                sentences=["Remember this."],
+                current_time=datetime.now(),
+            )
+
+        self.gemini_class.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ from google import genai
 from google.genai import types
 
 from src.ai.prompt_builder import PromptBuilder
-from src.config import GEMINI_MODEL
+from src.ai.openrouter_client import OpenRouterClient
+from src.config import GEMINI_MODEL, MEMORY_LLM_PROVIDER
 
 
 class MemoryEngine:
@@ -31,6 +32,7 @@ class MemoryEngine:
         self,
         privacy_gateway=None,
         context_selector=None,
+        provider=None,
     ):
 
         if (
@@ -44,21 +46,47 @@ class MemoryEngine:
 
         self.privacy_gateway = privacy_gateway
         self.context_selector = context_selector
+        self.provider = (
+            provider
+            if provider is not None
+            else MEMORY_LLM_PROVIDER
+        )
+
+        if not isinstance(self.provider, str):
+            raise ValueError(
+                "Unsupported memory LLM provider."
+            )
+
+        self.provider = self.provider.strip().lower()
+
+        if self.provider not in (
+            "gemini",
+            "openrouter",
+        ):
+            raise ValueError(
+                "Unsupported memory LLM provider."
+            )
 
         load_dotenv()
 
-        api_key = os.getenv(
-            "GEMINI_API_KEY"
-        )
+        if self.provider == "gemini":
 
-        if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY not found."
+            api_key = os.getenv(
+                "GEMINI_API_KEY"
             )
 
-        self.client = genai.Client(
-            api_key=api_key
-        )
+            if not api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY not found."
+                )
+
+            self.client = genai.Client(
+                api_key=api_key
+            )
+
+        else:
+
+            self.client = OpenRouterClient()
 
         self.prompt_builder = PromptBuilder()
 
@@ -158,7 +186,7 @@ class MemoryEngine:
             privacy_enabled = False
 
         # ---------------------------------
-        # Build Gemini Prompt
+        # Build Provider Prompt
         # ---------------------------------
 
         prompt = self.prompt_builder.build(
@@ -168,25 +196,46 @@ class MemoryEngine:
         )
 
         # ---------------------------------
-        # Gemini Request
+        # Provider Request
         # ---------------------------------
 
-        response = (
-            self.client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                    response_mime_type=(
-                        "application/json"
-                    ),
-                ),
-            )
-        )
+        if self.provider == "gemini":
 
-        result = json.loads(
-            response.text
-        )
+            response = (
+                self.client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                        response_mime_type=(
+                            "application/json"
+                        ),
+                    ),
+                )
+            )
+
+            response_text = response.text
+
+        else:
+
+            response_text = (
+                self.client.generate_text(
+                    prompt
+                )
+            )
+
+        try:
+            result = json.loads(
+                response_text
+            )
+
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            raise ValueError(
+                "Invalid JSON returned by the memory provider."
+            ) from None
 
         # ---------------------------------
         # Privacy Output Validation

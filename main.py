@@ -93,53 +93,134 @@ def shutdown_components(
     worker_thread,
     database,
 ):
-    """Stop all workers before closing shared resources."""
+    """Stop workers safely before closing shared resources."""
 
     print("\nStopping Assistant...")
+    failures = []
 
-    # Stop microphone/audio collection first.
-    audio_chunker.stop()
-    audio_chunker.join()
-
-    # Stop periodic session processing.
-    session_processor.stop()
-
-    # Prevent AudioWorker from processing more audio.
-    worker.stop()
-
-    # Remove audio chunks still waiting.
-    while True:
+    def stop_component(name, stop_function):
         try:
+            stop_function()
+            print(f"Stopped request sent: {name}")
+        except Exception as error:
+            failures.append(name)
+            print(f"Shutdown error ({name}): {error}")
+
+    def join_component(name, join_function, is_alive, timeout):
+        try:
+            join_function(timeout)
+            if is_alive():
+                failures.append(name)
+                print(
+                    f"WARNING: {name} did not stop "
+                    f"within {timeout} seconds."
+                )
+            else:
+                print(f"Stopped: {name}")
+        except Exception as error:
+            failures.append(name)
+            print(f"Shutdown error ({name}): {error}")
+
+    # 1. Stop audio collection and unblock microphone reads.
+    stop_component("Audio chunker", audio_chunker.stop)
+    stop_component("Microphone", microphone.stop)
+
+    join_component(
+        "Audio chunker",
+        audio_chunker.join,
+        lambda: (
+            audio_chunker._thread is not None
+            and audio_chunker._thread.is_alive()
+        ),
+        10,
+    )
+
+    # 2. Stop audio processing and discard queued, unprocessed audio.
+    stop_component("Audio worker", worker.stop)
+
+    try:
+        while True:
             audio_queue.get_nowait()
             audio_queue.task_done()
+    except queue.Empty:
+        pass
+    except Exception as error:
+        failures.append("Audio queue")
+        print(f"Shutdown error (Audio queue): {error}")
 
-        except queue.Empty:
-            break
+    try:
+        audio_queue.put_nowait(None)
+    except Exception as error:
+        failures.append("Audio worker signal")
+        print(f"Shutdown error (Audio worker signal): {error}")
 
-    # Wake AudioWorker and tell it to exit.
-    audio_queue.put(None)
+    join_component(
+        "Audio worker",
+        worker_thread.join,
+        worker_thread.is_alive,
+        30,
+    )
 
-    # Wait for workers to finish.
-    session_processor.join()
-    worker_thread.join()
+    # 3. Stop session processing.
+    stop_component("Session processor", session_processor.stop)
 
-    # Stop reminder checking before closing database.
-    reminder_worker.stop()
-    reminder_worker.join()
+    join_component(
+        "Session processor",
+        session_processor.join,
+        lambda: (
+            session_processor._thread is not None
+            and session_processor._thread.is_alive()
+        ),
+        30,
+    )
 
-    # Stop TFT display before closing shared database.
-    display_worker.stop()
-    display_worker.join()
+    # 4. Stop workers that may use the database or display hardware.
+    stop_component("Reminder worker", reminder_worker.stop)
 
-    # Stop dashboard before closing shared database.
-    web_server.stop()
-    web_server.join()
+    join_component(
+        "Reminder worker",
+        reminder_worker.join,
+        reminder_worker.is_alive,
+        10,
+    )
 
-    # Close shared resources last.
-    database.close()
-    microphone.stop()
+    stop_component("Display worker", display_worker.stop)
 
-    print("Assistant stopped.")
+    join_component(
+        "Display worker",
+        display_worker.join,
+        display_worker.is_alive,
+        10,
+    )
+
+    # 5. Stop the dashboard server without changing its implementation.
+    stop_component("Web server", web_server.stop)
+
+    join_component(
+        "Web server",
+        lambda timeout: web_server.thread.join(timeout=timeout),
+        web_server.thread.is_alive,
+        10,
+    )
+
+    # 6. Never close the database while a worker may still use it.
+    if failures:
+        print(
+            "WARNING: Some components did not shut down cleanly: "
+            + ", ".join(failures)
+        )
+        print(
+            "Database left open until process exit to protect "
+            "against concurrent access."
+        )
+    else:
+        try:
+            database.close()
+            print("Database closed.")
+        except Exception as error:
+            print(f"Database close failed: {error}")
+
+    print("Assistant shutdown sequence finished.")
 
 
 # ==========================================

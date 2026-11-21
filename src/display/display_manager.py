@@ -65,92 +65,149 @@ def centered_text(draw, y, text, font, color):
 # Robot Drawing
 # ==========================================
 
-def draw_robot(draw, frame, animation_time=None):
-    """Draw the compact home-screen robot using elapsed-time animation."""
+def draw_robot(draw, frame, listening_enabled=None, animation_time=None):
+    """Draw a floating companion within the original centered robot area."""
+    del frame  # Kept in the signature for compatibility with existing callers.
     if animation_time is None:
         animation_time = time.monotonic()
 
-    # Keep motion within the existing centered robot area.
-    float_y = math.sin(animation_time * 1.25) * 1.5
-    breath = (math.sin(animation_time * 1.7) + 1.0) * 0.5
-    x_shift = math.sin(animation_time * 0.42) * 1.5
+    listening = listening_enabled is not False
+    float_y = math.sin(animation_time * 1.15) * 1.5
+    breathe = (math.sin(animation_time * 1.6) + 1.0) * 0.5
+    x_shift = math.sin(animation_time * 0.38) * 1.3
     y_shift = int(round(float_y))
-    left = int(round(106 + x_shift))
-    right = int(round(214 + x_shift))
-    top = int(round(61 + y_shift - breath))
-    bottom = int(round(153 + y_shift + breath))
     center_x = int(round(160 + x_shift))
+    head_top = int(round(59 + y_shift - breathe))
+    head_bottom = int(round(146 + y_shift + breathe))
+    shell_width = int(round(96 + breathe))
+    left = center_x - shell_width // 2
+    right = center_x + shell_width // 2
 
-    # Antenna stem and softly pulsing beacon.
-    pulse = (math.sin(animation_time * 2.4) + 1.0) * 0.5
-    beacon = (48, int(170 + 55 * pulse), 220 + int(35 * pulse))
-    draw.line((center_x, top, center_x, top - 13), fill=(70, 145, 185), width=3)
+    # A restrained hover ring and shadow stay below the floating head.
+    hover_phase = (math.sin(animation_time * 1.4) + 1.0) * 0.5
+    ring_inset = int(round(5 * hover_phase))
     draw.ellipse(
-        (center_x - 7, top - 25, center_x + 7, top - 11),
-        fill=(24, 55, 78), outline=(65, 145, 185), width=1
-    )
-    draw.ellipse(
-        (center_x - 4, top - 22, center_x + 4, top - 14), fill=beacon
-    )
-
-    # Side modules retain the original ear footprint.
-    ear_top = top + 31
-    ear_bottom = ear_top + 30
-    for x1, x2, direction in (
-        (left - 12, left + 1, -1), (right - 1, right + 12, 1)
-    ):
-        draw.rounded_rectangle(
-            (x1, ear_top, x2, ear_bottom), radius=5,
-            fill=(28, 77, 103), outline=(48, 160, 195), width=1
-        )
-        grille_x = x1 + 4 if direction < 0 else x2 - 4
-        draw.line(
-            (grille_x, ear_top + 8, grille_x, ear_bottom - 8),
-            fill=CYAN, width=2
-        )
-
-    # Layered shell and a subtle upper highlight.
-    draw.rounded_rectangle(
-        (left, top, right, bottom), radius=24,
-        fill=(19, 35, 57), outline=(57, 157, 194), width=2
-    )
-    draw.rounded_rectangle(
-        (left + 5, top + 5, right - 5, bottom - 5), radius=20,
-        fill=ROBOT_COLOR, outline=(39, 72, 101), width=1
+        (125 + ring_inset, 151, 195 - ring_inset, 159),
+        fill=(13, 27, 43), outline=(22, 63, 83), width=1
     )
     draw.arc(
-        (left + 9, top + 7, right - 9, top + 31),
-        195, 345, fill=(85, 130, 157), width=1
+        (130 + ring_inset, 152, 190 - ring_inset, 158),
+        190, 350, fill=(35, 124, 157), width=1
     )
 
-    # Blinks and gaze changes use monotonic elapsed time, independent of FPS.
-    blink_phase = animation_time % 4.7
-    blink = max(0.0, 1.0 - abs(blink_phase - 0.12) / 0.12)
-    gaze_x = int(round(math.sin(animation_time * 0.55) * 2.0))
-    eye_y = top + 39
-    eye_color = (75, int(190 + 35 * pulse), 235)
-    for eye_x in (center_x - 25, center_x + 25):
-        eye_width = max(2, int(round(17 * (1.0 - 0.92 * blink))))
-        eye_height = max(2, int(round(16 * (1.0 - 0.92 * blink))))
+    # Cyan-lit rounded ear panels, tucked slightly behind the shell.
+    ear_top = head_top + 34
+    ear_bottom = ear_top + 27
+    ear_glow = 0.65 + (0.35 if listening else 0.0) * (
+        (math.sin(animation_time * 2.2) + 1.0) * 0.5
+    )
+    ear_color = (27, int(69 + 35 * ear_glow), int(91 + 45 * ear_glow))
+    for x1, x2 in ((left - 9, left + 5), (right - 5, right + 9)):
         draw.rounded_rectangle(
+            (x1, ear_top, x2, ear_bottom), radius=6,
+            fill=ear_color, outline=(77, 183, 210), width=1
+        )
+        draw.line(
+            (x1 + 4, ear_top + 7, x1 + 4, ear_bottom - 7),
+            fill=(91, 221, 239), width=2
+        )
+
+    # Short antenna and smoothly pulsing cyan beacon.
+    antenna_x = center_x
+    pulse = (math.sin(animation_time * 2.0) + 1.0) * 0.5
+    if listening:
+        pulse = 0.55 + pulse * 0.45
+    beacon = (40, int(160 + 75 * pulse), int(205 + 50 * pulse))
+    draw.line(
+        (antenna_x, head_top + 1, antenna_x, head_top - 10),
+        fill=(150, 190, 205), width=3
+    )
+    draw.ellipse(
+        (antenna_x - 6, head_top - 23, antenna_x + 6, head_top - 11),
+        fill=(39, 72, 91), outline=(117, 201, 219), width=1
+    )
+    draw.ellipse(
+        (antenna_x - 3, head_top - 20, antenna_x + 3, head_top - 14),
+        fill=beacon
+    )
+
+    # Pearl shell with layered silver shading and cyan edge accents.
+    draw.rounded_rectangle(
+        (left, head_top, right, head_bottom), radius=27,
+        fill=(150, 177, 194), outline=(92, 198, 220), width=2
+    )
+    draw.rounded_rectangle(
+        (left + 3, head_top + 3, right - 3, head_bottom - 3), radius=24,
+        fill=(219, 230, 235), outline=(246, 250, 250), width=1
+    )
+    draw.arc(
+        (left + 9, head_top + 5, right - 9, head_top + 28),
+        195, 345, fill=(255, 255, 255), width=2
+    )
+
+    # Dark glossy face panel.
+    face_left = center_x - 39
+    face_right = center_x + 39
+    face_top = head_top + 19
+    face_bottom = head_top + 68
+    draw.rounded_rectangle(
+        (face_left, face_top, face_right, face_bottom), radius=17,
+        fill=(7, 16, 31), outline=(80, 150, 176), width=1
+    )
+    draw.arc(
+        (face_left + 5, face_top + 2, face_right - 5, face_top + 19),
+        195, 345, fill=(36, 72, 94), width=1
+    )
+
+    # Gaze follows a slow, smooth path with occasional upward/downward looks.
+    gaze_x = int(round(math.sin(animation_time * 0.42) * 2.2))
+    gaze_y = int(round(math.sin(animation_time * 0.27 + 1.1) * 1.2))
+    eye_y = face_top + 22 + gaze_y
+    eye_centers = (center_x - 19, center_x + 19)
+
+    # Regular gentle blink, plus a rare short wink.
+    blink_phase = animation_time % 4.8
+    blink = max(0.0, 1.0 - abs(blink_phase - 0.13) / 0.13)
+    wink_phase = animation_time % 17.0
+    wink = max(0.0, 1.0 - abs(wink_phase - 0.18) / 0.18)
+    for index, eye_x in enumerate(eye_centers):
+        eye_blink = max(blink, wink if index == 0 else 0.0)
+        eye_width = max(3, int(round(15 * (1.0 - 0.9 * eye_blink))))
+        eye_height = max(2, int(round(17 * (1.0 - 0.92 * eye_blink))))
+        eye_glow = int(14 + (10 if listening else 0) + 8 * pulse)
+        draw.ellipse(
+            (eye_x - eye_width // 2 - 2, eye_y - eye_height // 2 - 2,
+             eye_x + eye_width // 2 + 2, eye_y + eye_height // 2 + 2),
+            fill=(15, 74 + eye_glow, 103 + eye_glow)
+        )
+        draw.ellipse(
             (eye_x - eye_width // 2, eye_y - eye_height // 2,
              eye_x + eye_width // 2, eye_y + eye_height // 2),
-            radius=min(5, eye_width // 2, eye_height // 2),
-            fill=eye_color
+            fill=(41, int(174 + 45 * pulse), 239)
         )
-        if blink < 0.65:
+        if eye_blink < 0.65:
             pupil_x = eye_x + gaze_x
             draw.ellipse(
                 (pupil_x - 2, eye_y - 3, pupil_x + 2, eye_y + 3),
-                fill=(226, 250, 255)
+                fill=(230, 250, 255)
             )
 
-    # A small smile variation adds expression without drawing attention.
-    smile_lift = int(round(math.sin(animation_time * 1.1) * 1.2))
-    mouth_top = top + 56 - smile_lift
+    # Curved brows follow the gaze; a tiny asymmetry hints at a relaxed tilt.
+    brow_tilt = int(round(math.sin(animation_time * 0.31) * 1.0))
+    for index, eye_x in enumerate(eye_centers):
+        brow_y = face_top + 10 + (brow_tilt if index == 0 else -brow_tilt)
+        draw.arc(
+            (eye_x - 9, brow_y - 4, eye_x + 9, brow_y + 5),
+            195, 345, fill=(157, 226, 244), width=2
+        )
+
+    # Small animated smile; listening adds a slightly more attentive lift.
+    smile_phase = (math.sin(animation_time * 1.05) + 1.0) * 0.5
+    mouth_lift = int(round(smile_phase * (2 if listening else 1)))
+    mouth_top = face_top + 36 - mouth_lift
     draw.arc(
-        (center_x - 14, mouth_top, center_x + 14, mouth_top + 17),
-        15, 165, fill=(151, 205, 220), width=2
+        (center_x - 11, mouth_top, center_x + 11, mouth_top + 13),
+        15, 165, fill=(151, 224, 241), width=2
     )
 
 
@@ -194,7 +251,7 @@ def draw_screen(display, frame, listening_enabled=None):
     )
 
     # Robot animation
-    draw_robot(draw, frame, time.monotonic())
+    draw_robot(draw, frame, listening_enabled, time.monotonic())
 
     # Microphone status
     if listening_enabled is None:

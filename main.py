@@ -386,9 +386,12 @@ def main():
     # TFT Display Worker
     # --------------------------------------
 
+    shutdown_event = threading.Event()
+
     display_worker = DisplayWorker(
         database=database,
         refresh_interval=5,
+        shutdown_event=shutdown_event,
     )
 
     display_worker.start()
@@ -517,8 +520,8 @@ def main():
 
     try:
 
-        while True:
-            threading.Event().wait(1)
+        while not shutdown_event.is_set():
+            shutdown_event.wait(0.2)
 
     except KeyboardInterrupt:
 

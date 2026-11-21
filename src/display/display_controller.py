@@ -72,7 +72,8 @@ class DisplayWorker(threading.Thread):
     def __init__(
         self,
         database=None,
-        refresh_interval=DATA_REFRESH_INTERVAL
+        refresh_interval=DATA_REFRESH_INTERVAL,
+        shutdown_event=None
     ):
 
         super().__init__(
@@ -82,6 +83,7 @@ class DisplayWorker(threading.Thread):
 
         self.database = database
         self.refresh_interval = refresh_interval
+        self.shutdown_event = shutdown_event
 
         self.stop_event = threading.Event()
 
@@ -101,6 +103,8 @@ class DisplayWorker(threading.Thread):
 
         self.previous_button_time = 0
         self.listening_button_time = 0
+        self.listening_button_pressed_at = None
+        self.shutdown_request_sent = False
         self.next_button_time = 0
         self.next_button_pressed_at = None
         self.update_request_sent = False
@@ -316,13 +320,44 @@ class DisplayWorker(threading.Thread):
 
         listening_state = GPIO.input(LISTENING_BUTTON_PIN)
 
+        # Detect a new microphone-button press.
         if (
             listening_state == GPIO.LOW
             and self.listening_button_state == GPIO.HIGH
             and now - self.listening_button_time >= BUTTON_DEBOUNCE_DELAY
         ):
             self.listening_button_time = now
-            self.toggle_listening()
+            self.listening_button_pressed_at = now
+            self.shutdown_request_sent = False
+
+        # A five-second hold requests graceful application shutdown.
+        if (
+            listening_state == GPIO.LOW
+            and self.listening_button_pressed_at is not None
+            and not self.shutdown_request_sent
+            and now - self.listening_button_pressed_at >= 5.0
+        ):
+            self.shutdown_request_sent = True
+
+            if self.shutdown_event is not None:
+                self.shutdown_event.set()
+                print("Display: Graceful shutdown requested.")
+            else:
+                print("Display: Shutdown event is not connected.")
+
+        # A short press toggles listening when released.
+        if (
+            listening_state == GPIO.HIGH
+            and self.listening_button_state == GPIO.LOW
+        ):
+            if (
+                self.listening_button_pressed_at is not None
+                and not self.shutdown_request_sent
+            ):
+                self.toggle_listening()
+
+            self.listening_button_pressed_at = None
+            self.shutdown_request_sent = False
 
         self.listening_button_state = listening_state
 

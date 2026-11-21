@@ -421,13 +421,16 @@ def main():
             context_selector=context_selector,
         )
 
-        print("🤖 Gemini memory processing enabled.")
+        print(
+            f"🤖 Memory processing enabled "
+            f"(provider: {memory_engine.provider})."
+        )
 
     else:
 
         memory_engine = DisabledMemoryEngine()
 
-        print("🤖 Gemini memory processing disabled.")
+        print("🤖 Memory processing disabled.")
 
     # --------------------------------------
     # Audio Queue

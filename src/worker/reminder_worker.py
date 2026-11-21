@@ -8,6 +8,7 @@ class ReminderWorker(threading.Thread):
         self,
         reminder_manager,
         check_interval=30,
+        notification_queue=None,
     ):
         super().__init__(
             daemon=True,
@@ -16,6 +17,11 @@ class ReminderWorker(threading.Thread):
 
         self.reminder_manager = reminder_manager
         self.check_interval = check_interval
+
+        # Optional queue for TFT display notifications.
+        # If no display queue is supplied, existing
+        # reminder behaviour remains unchanged.
+        self.notification_queue = notification_queue
 
         self.stop_event = threading.Event()
 
@@ -27,7 +33,20 @@ class ReminderWorker(threading.Thread):
         while not self.stop_event.is_set():
 
             try:
-                self.reminder_manager.check_due_reminders()
+                triggered_reminders = (
+                    self.reminder_manager.check_due_reminders()
+                )
+
+                # Forward already-triggered reminders
+                # to the display without changing the
+                # reminder manager's existing logic.
+                if self.notification_queue is not None:
+
+                    for reminder in triggered_reminders:
+
+                        self.notification_queue.put(
+                            reminder
+                        )
 
             except Exception as error:
                 print(

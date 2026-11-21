@@ -6,20 +6,22 @@ class AudioWorker:
     """Processes completed audio segments from the audio queue."""
 
     def __init__(
-        self,
-        audio_queue,
-        stt_service,
-        transcript_buffer,
-        keyword_filter,
-        memory_engine,
-        memory_manager,
-    ):
+    self,
+    audio_queue,
+    stt_service,
+    transcript_buffer,
+    keyword_filter,
+    memory_engine,
+    memory_manager,
+    transcript_callback=None,
+):
         self.audio_queue = audio_queue
         self.stt_service = stt_service
         self.transcript_buffer = transcript_buffer
         self.keyword_filter = keyword_filter
         self.memory_engine = memory_engine
         self.memory_manager = memory_manager
+        self.transcript_callback = transcript_callback
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -79,6 +81,15 @@ class AudioWorker:
 
         if not transcription:
             return
+
+               # Send completed transcription to the display
+        if self.transcript_callback is not None:
+            try:
+                self.transcript_callback(transcription)
+            except Exception as error:
+                print(
+                    f"Display transcript update failed: {error}"
+                )
 
         # -------------------------------------------------
         # 2. Add transcription to conversation buffer

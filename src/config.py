@@ -1,3 +1,11 @@
+import os
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
 # src/config.py
 
 
@@ -19,14 +27,28 @@ STT_MODEL = "universal-3-5-pro"
 
 
 # ===========================
+# Memory LLM Provider Settings
+# ===========================
+
+MEMORY_LLM_PROVIDER = os.getenv(
+    "MEMORY_LLM_PROVIDER",
+    "gemini",
+).strip().lower()
+
+OPENROUTER_MODEL = os.getenv(
+    "OPENROUTER_MODEL",
+    "google/gemini-3.8-flash",
+).strip()
+
+
+# ===========================
 # Gemini Settings
 # ===========================
 
-# Keep Gemini disabled during development/testing.
 # The API key can remain safely inside .env.
-ENABLE_GEMINI = False
+ENABLE_GEMINI = True
 
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.8-flash"
 
 
 # ===========================

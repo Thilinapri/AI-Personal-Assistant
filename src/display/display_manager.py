@@ -1,6 +1,7 @@
 
 import time
 import math
+from functools import lru_cache
 import RPi.GPIO as GPIO
 import st7789
 from PIL import Image, ImageDraw, ImageFont
@@ -28,6 +29,7 @@ RED = (235, 105, 105)
 # Font Loading
 # ==========================================
 
+@lru_cache(maxsize=8)
 def load_font(size):
     paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -63,76 +65,92 @@ def centered_text(draw, y, text, font, color):
 # Robot Drawing
 # ==========================================
 
-def draw_robot(draw, frame):
+def draw_robot(draw, frame, animation_time=None):
+    """Draw the compact home-screen robot using elapsed-time animation."""
+    if animation_time is None:
+        animation_time = time.monotonic()
 
-    # Robot head
-    draw.rounded_rectangle(
-        (105, 57, 215, 157),
-        radius=27,
-        fill=ROBOT_COLOR,
-        outline=CYAN,
-        width=3
-    )
+    # Keep motion within the existing centered robot area.
+    float_y = math.sin(animation_time * 1.25) * 1.5
+    breath = (math.sin(animation_time * 1.7) + 1.0) * 0.5
+    x_shift = math.sin(animation_time * 0.42) * 1.5
+    y_shift = int(round(float_y))
+    left = int(round(106 + x_shift))
+    right = int(round(214 + x_shift))
+    top = int(round(61 + y_shift - breath))
+    bottom = int(round(153 + y_shift + breath))
+    center_x = int(round(160 + x_shift))
 
-    # Antenna
-    draw.line(
-        (160, 57, 160, 43),
-        fill=CYAN,
-        width=3
-    )
-
+    # Antenna stem and softly pulsing beacon.
+    pulse = (math.sin(animation_time * 2.4) + 1.0) * 0.5
+    beacon = (48, int(170 + 55 * pulse), 220 + int(35 * pulse))
+    draw.line((center_x, top, center_x, top - 13), fill=(70, 145, 185), width=3)
     draw.ellipse(
-        (155, 36, 165, 46),
-        fill=CYAN
+        (center_x - 7, top - 25, center_x + 7, top - 11),
+        fill=(24, 55, 78), outline=(65, 145, 185), width=1
+    )
+    draw.ellipse(
+        (center_x - 4, top - 22, center_x + 4, top - 14), fill=beacon
     )
 
-    # Robot ears
-    draw.rounded_rectangle(
-        (94, 92, 106, 125),
-        radius=5,
-        fill=CYAN
-    )
-
-    draw.rounded_rectangle(
-        (214, 92, 226, 125),
-        radius=5,
-        fill=CYAN
-    )
-
-    # Blinking eyes
-    blink = frame % 24 in (0, 1)
-
-    if blink:
+    # Side modules retain the original ear footprint.
+    ear_top = top + 31
+    ear_bottom = ear_top + 30
+    for x1, x2, direction in (
+        (left - 12, left + 1, -1), (right - 1, right + 12, 1)
+    ):
+        draw.rounded_rectangle(
+            (x1, ear_top, x2, ear_bottom), radius=5,
+            fill=(28, 77, 103), outline=(48, 160, 195), width=1
+        )
+        grille_x = x1 + 4 if direction < 0 else x2 - 4
         draw.line(
-            (125, 103, 144, 103),
-            fill=CYAN,
-            width=3
+            (grille_x, ear_top + 8, grille_x, ear_bottom - 8),
+            fill=CYAN, width=2
         )
 
-        draw.line(
-            (176, 103, 195, 103),
-            fill=CYAN,
-            width=3
-        )
-
-    else:
-        draw.ellipse(
-            (125, 91, 144, 112),
-            fill=CYAN
-        )
-
-        draw.ellipse(
-            (176, 91, 195, 112),
-            fill=CYAN
-        )
-
-    # Smile
+    # Layered shell and a subtle upper highlight.
+    draw.rounded_rectangle(
+        (left, top, right, bottom), radius=24,
+        fill=(19, 35, 57), outline=(57, 157, 194), width=2
+    )
+    draw.rounded_rectangle(
+        (left + 5, top + 5, right - 5, bottom - 5), radius=20,
+        fill=ROBOT_COLOR, outline=(39, 72, 101), width=1
+    )
     draw.arc(
-        (137, 111, 183, 144),
-        10,
-        170,
-        fill=WHITE,
-        width=2
+        (left + 9, top + 7, right - 9, top + 31),
+        195, 345, fill=(85, 130, 157), width=1
+    )
+
+    # Blinks and gaze changes use monotonic elapsed time, independent of FPS.
+    blink_phase = animation_time % 4.7
+    blink = max(0.0, 1.0 - abs(blink_phase - 0.12) / 0.12)
+    gaze_x = int(round(math.sin(animation_time * 0.55) * 2.0))
+    eye_y = top + 39
+    eye_color = (75, int(190 + 35 * pulse), 235)
+    for eye_x in (center_x - 25, center_x + 25):
+        eye_width = max(2, int(round(17 * (1.0 - 0.92 * blink))))
+        eye_height = max(2, int(round(16 * (1.0 - 0.92 * blink))))
+        draw.rounded_rectangle(
+            (eye_x - eye_width // 2, eye_y - eye_height // 2,
+             eye_x + eye_width // 2, eye_y + eye_height // 2),
+            radius=min(5, eye_width // 2, eye_height // 2),
+            fill=eye_color
+        )
+        if blink < 0.65:
+            pupil_x = eye_x + gaze_x
+            draw.ellipse(
+                (pupil_x - 2, eye_y - 3, pupil_x + 2, eye_y + 3),
+                fill=(226, 250, 255)
+            )
+
+    # A small smile variation adds expression without drawing attention.
+    smile_lift = int(round(math.sin(animation_time * 1.1) * 1.2))
+    mouth_top = top + 56 - smile_lift
+    draw.arc(
+        (center_x - 14, mouth_top, center_x + 14, mouth_top + 17),
+        15, 165, fill=(151, 205, 220), width=2
     )
 
 
@@ -176,7 +194,7 @@ def draw_screen(display, frame, listening_enabled=None):
     )
 
     # Robot animation
-    draw_robot(draw, frame)
+    draw_robot(draw, frame, time.monotonic())
 
     # Microphone status
     if listening_enabled is None:

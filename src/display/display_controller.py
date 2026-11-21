@@ -1,9 +1,10 @@
 import time
 import threading
+import os
 
 import RPi.GPIO as GPIO
 import st7789
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 # ==========================================
 # Screen imports
@@ -50,6 +51,7 @@ BUTTON_DEBOUNCE_DELAY = 0.25
 
 UPDATE_HOLD_SECONDS = 5.0
 UPDATE_REQUEST_FILE = "/home/pi4/echomind-deploy/update.request"
+UPDATE_STATUS_FILE = "/home/pi4/echomind-deploy/update.status"
 
 SCREENS = [
     "home",
@@ -103,10 +105,28 @@ class DisplayWorker(threading.Thread):
         self.next_button_pressed_at = None
         self.update_request_sent = False
 
+        self.last_update_status = ""
+        self.update_status_started_at = 0
+        self.last_update_render = 0
+
         self.data_changed = True
         self.transcript_changed = True
 
         self.data_lock = threading.Lock()
+
+    # ======================================
+    # Read software update status
+    # ======================================
+
+    def get_update_status(self):
+        try:
+            with open(UPDATE_STATUS_FILE, "r") as status_file:
+                return status_file.read().strip()
+        except FileNotFoundError:
+            return ""
+        except OSError as error:
+            print("Display: Could not read update status:", repr(error))
+            return ""
 
     # ======================================
     # Store latest completed transcription
@@ -326,6 +346,9 @@ class DisplayWorker(threading.Thread):
             and now - self.next_button_pressed_at >= UPDATE_HOLD_SECONDS
         ):
             try:
+                with open(UPDATE_STATUS_FILE, "w") as status_file:
+                    status_file.write("checking")
+
                 with open(UPDATE_REQUEST_FILE, "a") as request:
                     request.write(f"{time.time()}\n")
 
@@ -388,6 +411,66 @@ class DisplayWorker(threading.Thread):
             )
 
     # ======================================
+    # Draw software update screen
+    # ======================================
+
+    def draw_update_screen(self, display, status):
+
+        messages = {
+            "checking": ("Checking for updates...", "Connecting to GitHub"),
+            "downloading": ("Downloading update...", "Please wait"),
+            "installing": ("Installing update...", "Please do not turn off"),
+            "success": ("Update successful!", "EchoMind is ready"),
+            "uptodate": ("Already up to date", "You have the latest version"),
+            "failed": ("Update failed", "Please try again later"),
+            "rollback": ("Restoring previous version...", "Recovering EchoMind"),
+            "rolledback": ("Update failed", "Previous version restored"),
+        }
+
+        title, subtitle = messages.get(
+            status,
+            ("Software update", "Please wait")
+        )
+
+        image = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+
+        draw.text((12, 35), "ECHOMIND", fill=(80, 190, 255), font=font)
+        draw.line((12, 60, WIDTH - 12, 60), fill=(55, 75, 105), width=2)
+
+        title_box = draw.textbbox((0, 0), title, font=font)
+        title_width = title_box[2] - title_box[0]
+        title_x = (WIDTH - title_width) // 2
+
+        draw.text(
+            (title_x, 105),
+            title,
+            fill=(255, 255, 255),
+            font=font
+        )
+
+        subtitle_box = draw.textbbox((0, 0), subtitle, font=font)
+        subtitle_width = subtitle_box[2] - subtitle_box[0]
+
+        draw.text(
+            ((WIDTH - subtitle_width) // 2, 135),
+            subtitle,
+            fill=(170, 190, 215),
+            font=font
+        )
+
+        if status in ("checking", "downloading", "installing", "rollback"):
+            draw.rectangle((30, 180, WIDTH - 30, 188), outline=(80, 110, 145))
+            position = int(time.monotonic() * 80) % (WIDTH - 76)
+            draw.rectangle(
+                (34 + position, 182, 54 + position, 186),
+                fill=(60, 180, 255)
+            )
+
+        display.display(image)
+
+    # ======================================
     # Main Display Loop
     # ======================================
 
@@ -411,6 +494,32 @@ class DisplayWorker(threading.Thread):
                 now = time.monotonic()
 
                 self.handle_buttons()
+
+                update_status = self.get_update_status()
+
+                if update_status:
+                    if update_status != self.last_update_status:
+                        self.last_update_status = update_status
+                        self.update_status_started_at = now
+
+                    if now - self.last_update_render >= 0.15:
+                        self.draw_update_screen(display, update_status)
+                        self.last_update_render = now
+
+                    if (
+                        update_status in ("success", "uptodate", "failed", "rolledback")
+                        and now - self.update_status_started_at >= 5
+                    ):
+                        try:
+                            if self.get_update_status() == update_status:
+                                os.unlink(UPDATE_STATUS_FILE)
+                        except OSError as error:
+                            print("Display: Could not clear update status:", repr(error))
+
+                    self.stop_event.wait(0.03)
+                    continue
+
+                self.last_update_status = ""
 
                 if (
                     self.database is not None
